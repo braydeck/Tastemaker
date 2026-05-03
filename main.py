@@ -103,6 +103,13 @@ MEDIUM_DOT_CLASSES = {
     "game": "bg-orange-500",
 }
 
+QUALITY_FLOORS = {
+    "movie": {"score_field": "vote_average",  "count_field": "vote_count",   "min_score": 7.0, "min_count": 200},
+    "tv":    {"score_field": "vote_average",  "count_field": "vote_count",   "min_score": 7.5, "min_count": 100},
+    "book":  {"score_field": "averageRating", "count_field": "ratingsCount", "min_score": 3.6, "min_count": 50},
+    "game":  {"score_field": "rating",        "count_field": "rating_count", "min_score": 75,  "min_count": 10},
+}
+
 # Expose constants to all templates
 templates.env.globals.update({
     "TIER_NAMES": TIER_NAMES,
@@ -203,6 +210,21 @@ def enrich_rec(title: str, medium: str) -> tuple[dict, str | None, list]:
                 url = links.get("thumbnail") or links.get("smallThumbnail")
                 if url:
                     poster_url = url.replace("http://", "https://")
+        elif medium == "game":
+            token = get_igdb_token()
+            body = (
+                f'search "{title}"; '
+                "fields name,summary,genres.name,themes.name,first_release_date,cover.url,"
+                "rating,rating_count,involved_companies.company.name,involved_companies.developer; "
+                "limit 1;"
+            )
+            resp, _ = igdb_request(body, token)
+            results = resp.json()
+            if results:
+                metadata = dict(results[0])
+                cover = metadata.get("cover") or {}
+                if cover.get("url"):
+                    poster_url = "https:" + cover["url"].replace("t_thumb", "t_cover_big")
     except Exception:
         pass
     return metadata, poster_url, watch_providers
@@ -610,6 +632,7 @@ async def log_submit(
             token = get_igdb_token()
             body = (
                 f"fields name,summary,genres.name,first_release_date,cover.url,"
+                f"rating,rating_count,"
                 f"involved_companies.company.name,involved_companies.developer; "
                 f"where id = {igdb_id}; limit 1;"
             )
@@ -974,7 +997,64 @@ async def watchlist(request: Request) -> HTMLResponse:
     for it in items:
         it["_id"] = str(it["_id"])
         it["poster_url"] = get_poster_url(it)
-    return templates.TemplateResponse("watchlist.html", {"request": request, "items": items})
+    seen_names: set = set()
+    all_providers = []
+    for it in items:
+        for p in (it.get("watch_providers") or []):
+            if p.get("name") and p["name"] not in seen_names:
+                seen_names.add(p["name"])
+                all_providers.append(p)
+    all_providers.sort(key=lambda p: p["name"])
+    all_sources = sorted({it["rec_source"] for it in items if it.get("rec_source")})
+    return templates.TemplateResponse("watchlist.html", {
+        "request": request,
+        "items": items,
+        "all_providers": all_providers,
+        "all_sources": all_sources,
+    })
+
+
+@app.post("/watchlist/enrich-all", response_class=HTMLResponse)
+async def watchlist_enrich_all(request: Request) -> HTMLResponse:
+    db = get_db()
+    needs = list(db["Watchlist"].find({
+        "$or": [
+            {"medium": {"$in": ["movie", "tv"]}, "watch_providers": {"$in": [None, []]}},
+            {"rating_score": None},
+        ]
+    }))
+    count = 0
+    for item in needs:
+        try:
+            medium = item["medium"]
+            metadata, poster_url, watch_providers = enrich_rec(item["title"], medium)
+            rating_score: float | None = None
+            if medium in ("movie", "tv"):
+                rating_score = metadata.get("vote_average")
+            elif medium == "book":
+                rating_score = metadata.get("averageRating")
+            elif medium == "game":
+                rating_score = metadata.get("rating")
+            updates: dict = {}
+            if watch_providers and not item.get("watch_providers"):
+                updates["watch_providers"] = watch_providers
+            if rating_score is not None and item.get("rating_score") is None:
+                updates["rating_score"] = rating_score
+            if not item.get("poster_url") and poster_url:
+                updates["poster_url"] = poster_url
+            if not item.get("metadata") and metadata:
+                updates["metadata"] = metadata
+            if updates:
+                db["Watchlist"].update_one({"_id": item["_id"]}, {"$set": updates})
+                count += 1
+        except Exception:
+            pass
+    if count:
+        return HTMLResponse(
+            f'<span class="text-xs text-emerald-400">✓ Enriched {count} item{"s" if count != 1 else ""}. '
+            f'<a href="/watchlist" class="underline hover:text-white">Reload to see changes →</a></span>'
+        )
+    return HTMLResponse('<span class="text-xs text-neutral-500">All items already enriched.</span>')
 
 
 @app.post("/watchlist/add", response_class=HTMLResponse)
@@ -989,6 +1069,8 @@ async def watchlist_add(
     sel_year: str = Form(""),
     sel_creator: str = Form(""),
     sel_poster_url: str = Form(""),
+    rating_score: str = Form(""),
+    rec_source: str = Form(""),
 ) -> HTMLResponse:
     db = get_db()
     now = datetime.now(tz=timezone.utc)
@@ -1021,6 +1103,7 @@ async def watchlist_add(
             token = get_igdb_token()
             body = (
                 f"fields name,summary,genres.name,first_release_date,cover.url,"
+                f"rating,rating_count,"
                 f"involved_companies.company.name,involved_companies.developer; "
                 f"where id = {igdb_id}; limit 1;"
             )
@@ -1064,6 +1147,14 @@ async def watchlist_add(
         except Exception:
             pass
 
+    stored_rating: float | None = float(rating_score) if rating_score.strip() else None
+    if stored_rating is None and medium in ("movie", "tv"):
+        stored_rating = metadata.get("vote_average")
+    elif stored_rating is None and medium == "book":
+        stored_rating = metadata.get("averageRating")
+    elif stored_rating is None and medium == "game":
+        stored_rating = metadata.get("rating")
+
     db["Watchlist"].insert_one({
         "title": final_title,
         "medium": medium,
@@ -1076,6 +1167,8 @@ async def watchlist_add(
         "poster_url": poster_url,
         "watch_providers": watch_providers,
         "psychological_tags": {},
+        "rating_score": stored_rating,
+        "rec_source": rec_source or None,
     })
     return templates.TemplateResponse("partials/watchlist_added.html", {
         "request": request,
@@ -1296,6 +1389,7 @@ The user enjoys specific titles listed below. Based on those titles and their ps
 Match the style, tone, and qualities that make those seeds compelling.
 CRITICAL RULE: The EXCLUDE list contains everything the user has already seen, read, played, or queued. You MUST check every single recommendation against that list before including it. Any title appearing on the EXCLUDE list — even under a slightly different format — must be dropped and replaced with something else. Violating this rule makes the recommendations useless.
 IMPORTANT: This user has a large, well-curated library. Do NOT suggest the obvious genre classics — they almost certainly have them. Prioritize deep cuts, underseen works, and non-obvious choices that match the same qualities.
+QUALITY: Prefer well-regarded titles — movies/TV above 7/10, books above 3.5/5, games above 75/100 on community aggregators. Avoid panned or critically ignored works.
 Return ONLY a valid JSON array — no preamble, no explanation, no markdown.
 Return format: [{"title": "...", "medium": "movie|tv|book|game", "reason": "one sentence"}, ...]"""
 
@@ -1303,6 +1397,7 @@ CLUSTER_SYSTEM_PROMPT = """You are a media recommendation engine.
 The user has a specific taste facet described below. Recommend 25 titles matching that taste.
 CRITICAL RULE: The EXCLUDE list contains everything the user has already seen, read, played, or queued. You MUST check every single recommendation against that list before including it. Any title appearing on the EXCLUDE list — even under a slightly different format — must be dropped and replaced with something else. Violating this rule makes the recommendations useless.
 IMPORTANT: This user has a large, well-curated library. Do NOT suggest the obvious genre classics — they almost certainly have them. Prioritize deep cuts, underseen works, and non-obvious choices that match the same qualities.
+QUALITY: Prefer well-regarded titles — movies/TV above 7/10, books above 3.5/5, games above 75/100 on community aggregators. Avoid panned or critically ignored works.
 Return ONLY a valid JSON array — no preamble, no explanation, no markdown.
 Return format: [{"title": "...", "medium": "movie|tv|book|game", "reason": "one sentence"}, ...]"""
 
@@ -1351,11 +1446,46 @@ def _enrich_and_normalize(rec: dict) -> dict:
         authors = metadata.get("authors") or []
         if authors:
             creator = ", ".join(authors)
+    elif medium == "game" and metadata.get("name"):
+        final_title = metadata["name"]
+        if metadata.get("first_release_date"):
+            year = datetime.utcfromtimestamp(metadata["first_release_date"]).year
+        devs = [
+            c["company"]["name"]
+            for c in (metadata.get("involved_companies") or [])
+            if c.get("developer") and isinstance(c.get("company"), dict)
+        ]
+        creator = devs[0] if devs else ""
+
+    rating_score: float | None = None
+    rating_count: int = 0
+    if medium in ("movie", "tv"):
+        rating_score = metadata.get("vote_average")
+        rating_count = metadata.get("vote_count") or 0
+    elif medium == "book":
+        rating_score = metadata.get("averageRating")
+        rating_count = metadata.get("ratingsCount") or 0
+    elif medium == "game":
+        rating_score = metadata.get("rating")
+        rating_count = metadata.get("rating_count") or 0
+
     return {
         "title": final_title, "medium": medium, "creator": creator, "year": year,
         "reason": rec.get("reason", ""), "metadata": metadata,
         "poster_url": poster_url, "watch_providers": watch_providers,
+        "rating_score": rating_score, "rating_count": rating_count,
     }
+
+
+def _passes_quality_filter(rec: dict) -> bool:
+    floor = QUALITY_FLOORS.get(rec.get("medium", ""))
+    if not floor:
+        return True
+    score = rec.get("rating_score")
+    count = rec.get("rating_count") or 0
+    if score is None or count < floor["min_count"]:
+        return True  # no data or too few votes — don't penalize obscure titles
+    return score >= floor["min_score"]
 
 
 @app.get("/discover", response_class=HTMLResponse)
@@ -1421,6 +1551,7 @@ async def discover_generate(
             f"{medium_constraint}"
         )
         system = SEED_SYSTEM_PROMPT
+        rec_source = "seed"
 
     else:  # cluster mode
         cd = db["ClusterDefs"].find_one({"cluster_id": cluster_id})
@@ -1451,6 +1582,7 @@ async def discover_generate(
             f"{medium_constraint}"
         )
         system = CLUSTER_SYSTEM_PROMPT
+        rec_source = cd["name"]
 
     try:
         msg = ai_client.messages.create(
@@ -1482,10 +1614,15 @@ async def discover_generate(
         if final_t.lower() in exclusion or _normalize_title(final_t) in exclusion_norm:
             filtered_out.append(final_t)
             continue
+        if not _passes_quality_filter(enriched):
+            score = enriched.get("rating_score")
+            filtered_out.append(f"{final_t} (score: {score:.1f})" if score else final_t)
+            continue
         results.append(enriched)
 
     return templates.TemplateResponse("partials/discover_results.html", {
         "request": request,
         "recs": results,
         "filtered_out": filtered_out,
+        "rec_source": rec_source,
     })

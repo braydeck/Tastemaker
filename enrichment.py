@@ -371,7 +371,8 @@ def fetch_tmdb(title: str, medium: str, genre_map: dict) -> dict | None:
 def fetch_igdb(title: str, token: str) -> tuple[dict | None, str]:
     body = (
         f'search "{title}"; '
-        "fields name,summary,genres.name,themes.name,first_release_date,cover.url; "
+        "fields name,summary,genres.name,themes.name,first_release_date,cover.url,"
+        "rating,rating_count,involved_companies.company.name,involved_companies.developer; "
         "limit 1;"
     )
     resp, token = igdb_request(body, token)

@@ -135,10 +135,21 @@
 
   <div id="add-result" class="mb-4"></div>
 
-  <!-- Medium filter -->
+  <!-- Filters + items -->
   {% if items %}
-  <div x-data="{ filter: 'all' }" class="mb-4">
-    <div class="flex gap-2 flex-wrap mb-4">
+  <div x-data="{
+    filter: 'all',
+    selectedProviders: [],
+    selectedSource: '',
+    toggleProvider(name) {
+      const i = this.selectedProviders.indexOf(name);
+      if (i >= 0) this.selectedProviders.splice(i, 1);
+      else this.selectedProviders.push(name);
+    }
+  }" class="mb-4">
+
+    <!-- Medium filter -->
+    <div class="flex gap-2 flex-wrap mb-3">
       {% for label, value in [("All", "all"), ("Movies", "movie"), ("TV", "tv"), ("Books", "book"), ("Games", "game")] %}
       <button @click="filter = '{{ value }}'"
               :class="filter === '{{ value }}' ? 'bg-white text-black' : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'"
@@ -148,10 +159,50 @@
       {% endfor %}
     </div>
 
+    <!-- Discover source filter -->
+    {% if all_sources %}
+    <div class="flex items-center gap-2 flex-wrap mb-3">
+      <span class="text-xs text-neutral-600">Discovered via:</span>
+      {% for src in all_sources %}
+      <button @click="selectedSource = selectedSource === '{{ src | e }}' ? '' : '{{ src | e }}'"
+              :class="selectedSource === '{{ src | e }}' ? 'bg-neutral-700 text-white border-neutral-500' : 'text-neutral-400 border-neutral-800 hover:border-neutral-600'"
+              class="px-2.5 py-1 rounded-full text-xs border transition-colors">
+        {{ src }}
+      </button>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Streaming service filter -->
+    {% if all_providers %}
+    <div class="flex items-center gap-2 flex-wrap mb-4">
+      <span class="text-xs text-neutral-600">Stream on:</span>
+      {% for p in all_providers %}
+      <button @click="toggleProvider('{{ p.name }}')"
+              :class="selectedProviders.includes('{{ p.name }}') ? 'ring-2 ring-white' : 'opacity-40 hover:opacity-70'"
+              class="rounded transition-all"
+              title="{{ p.name }}">
+        <img src="https://image.tmdb.org/t/p/w45{{ p.logo_path }}"
+             alt="{{ p.name }}" class="w-6 h-6 rounded">
+      </button>
+      {% endfor %}
+      <button x-show="selectedProviders.length > 0"
+              @click="selectedProviders = []"
+              class="text-xs text-neutral-500 hover:text-white transition-colors ml-1">
+        Clear
+      </button>
+    </div>
+    {% endif %}
+
     <div class="space-y-2">
       {% for item in items %}
+      {% set provider_names = (item.watch_providers or []) | map(attribute='name') | list %}
       <div id="wl-{{ item._id }}"
-           x-show="filter === 'all' || filter === '{{ item.medium }}'"
+           data-providers='{{ provider_names | tojson }}'
+           x-show="(filter === 'all' || filter === '{{ item.medium }}') &&
+                   (selectedProviders.length === 0 ||
+                    JSON.parse($el.dataset.providers).some(p => selectedProviders.includes(p))) &&
+                   (selectedSource === '' || '{{ item.rec_source or '' }}' === selectedSource)"
            class="flex items-center gap-4 p-3 border border-neutral-800 rounded-lg hover:border-neutral-700 transition-colors">
         {% if item.poster_url %}
         <img src="{{ item.poster_url }}" alt="{{ item.title }}"
@@ -164,10 +215,12 @@
 
         <div class="flex-1 min-w-0">
           <p class="font-medium text-sm truncate">{{ item.title }}</p>
+          {% set r = item.rating_score or item.metadata.vote_average or item.metadata.averageRating %}
           <p class="text-xs text-neutral-500 capitalize">
             {{ item.medium }}
             {% if item.creator %} · {{ item.creator }}{% endif %}
             {% if item.year %} · {{ item.year }}{% endif %}
+            {% if r %} · <span class="text-neutral-400">★ {{ "%.1f"|format(r) }}</span>{% endif %}
             {% if item.source == "llm_recommendation" %} · <span class="text-purple-400">Recommended</span>{% endif %}
           </p>
           {% if item.reason %}
@@ -211,6 +264,28 @@
   <div class="text-center py-20 text-neutral-500">
     <p>Your watchlist is empty.</p>
     <p class="text-sm mt-1">Add items manually or generate recommendations from <a href="/discover" class="underline hover:text-white">Discover</a>.</p>
+  </div>
+  {% endif %}
+
+  {% if items %}
+  <div class="mt-10 pt-6 border-t border-neutral-800 flex items-center gap-4">
+    <span id="enrich-result">
+      <form hx-post="/watchlist/enrich-all"
+            hx-target="#enrich-result"
+            hx-swap="innerHTML"
+            hx-indicator="#enrich-spinner">
+        <button type="submit"
+                class="flex items-center gap-2 px-3 py-1.5 text-xs text-neutral-500 hover:text-white
+                       border border-neutral-800 hover:border-neutral-600 rounded-lg transition-colors">
+          <svg id="enrich-spinner" class="htmx-indicator animate-spin w-3 h-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+          </svg>
+          Enrich watchlist
+        </button>
+      </form>
+    </span>
+    <p class="text-xs text-neutral-700">Fetches missing ratings and streaming availability.</p>
   </div>
   {% endif %}
 </div>

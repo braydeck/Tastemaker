@@ -32,6 +32,7 @@
         {{ rec.medium }}
         {% if rec.creator %} · {{ rec.creator }}{% endif %}
         {% if rec.year %} · {{ rec.year }}{% endif %}
+        {% if rec.rating_score %} · <span class="text-neutral-400">★ {{ "%.1f"|format(rec.rating_score) }}</span>{% endif %}
       </p>
       {% if rec.reason %}
       <p class="text-xs text-neutral-400 mt-0.5 leading-relaxed">{{ rec.reason }}</p>
@@ -57,6 +58,10 @@
           <input type="hidden" name="medium" value="{{ rec.medium | e }}">
           <input type="hidden" name="reason" value="{{ rec.reason | e }}">
           <input type="hidden" name="sel_poster_url" value="{{ rec.poster_url or '' }}">
+          <input type="hidden" name="rating_score" value="{{ rec.rating_score or '' }}">
+          <input type="hidden" name="tmdb_id" value="{{ rec.metadata.id or 0 if rec.medium in ('movie', 'tv') else 0 }}">
+          <input type="hidden" name="igdb_id" value="{{ rec.metadata.id or 0 if rec.medium == 'game' else 0 }}">
+          <input type="hidden" name="rec_source" value="{{ rec_source | e }}">
           <button type="submit"
                   class="w-full px-3 py-1.5 text-xs font-medium bg-neutral-800 hover:bg-neutral-700
                          border border-neutral-700 rounded-lg transition-colors whitespace-nowrap">
