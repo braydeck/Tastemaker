@@ -165,8 +165,11 @@ def fetch_tmdb_by_id(tmdb_id: int, medium: str) -> dict:
         )
         us = wp_resp.json().get("results", {}).get("US", {})
         data["watch_providers"] = [
-            {"name": p["provider_name"], "logo_path": p["logo_path"]}
+            {"name": p["provider_name"], "logo_path": p["logo_path"], "type": "stream"}
             for p in us.get("flatrate", [])
+        ] + [
+            {"name": p["provider_name"], "logo_path": p["logo_path"], "type": "buy"}
+            for p in us.get("buy", [])
         ]
     except Exception:
         data["watch_providers"] = []
@@ -197,8 +200,11 @@ def enrich_rec(title: str, medium: str) -> tuple[dict, str | None, list]:
                     )
                     us = wp_resp.json().get("results", {}).get("US", {})
                     watch_providers = [
-                        {"name": p["provider_name"], "logo_path": p["logo_path"]}
+                        {"name": p["provider_name"], "logo_path": p["logo_path"], "type": "stream"}
                         for p in us.get("flatrate", [])
+                    ] + [
+                        {"name": p["provider_name"], "logo_path": p["logo_path"], "type": "buy"}
+                        for p in us.get("buy", [])
                     ]
                     metadata["watch_providers"] = watch_providers
                 except Exception:
@@ -837,8 +843,11 @@ async def fetch_metadata(request: Request, item_id: str) -> HTMLResponse:
                     )
                     us = wp_resp.json().get("results", {}).get("US", {})
                     metadata["watch_providers"] = [
-                        {"name": p["provider_name"], "logo_path": p["logo_path"]}
+                        {"name": p["provider_name"], "logo_path": p["logo_path"], "type": "stream"}
                         for p in us.get("flatrate", [])
+                    ] + [
+                        {"name": p["provider_name"], "logo_path": p["logo_path"], "type": "buy"}
+                        for p in us.get("buy", [])
                     ]
                 except Exception:
                     pass
@@ -997,19 +1006,30 @@ async def watchlist(request: Request) -> HTMLResponse:
     for it in items:
         it["_id"] = str(it["_id"])
         it["poster_url"] = get_poster_url(it)
-    seen_names: set = set()
-    all_providers = []
+    seen_stream: set = set()
+    seen_buy: set = set()
+    stream_providers: list = []
+    buy_providers: list = []
     for it in items:
         for p in (it.get("watch_providers") or []):
-            if p.get("name") and p["name"] not in seen_names:
-                seen_names.add(p["name"])
-                all_providers.append(p)
-    all_providers.sort(key=lambda p: p["name"])
+            if not p.get("name"):
+                continue
+            if p.get("type") == "buy":
+                if p["name"] not in seen_buy:
+                    seen_buy.add(p["name"])
+                    buy_providers.append(p)
+            else:
+                if p["name"] not in seen_stream:
+                    seen_stream.add(p["name"])
+                    stream_providers.append(p)
+    stream_providers.sort(key=lambda p: p["name"])
+    buy_providers.sort(key=lambda p: p["name"])
     all_sources = sorted({it["rec_source"] for it in items if it.get("rec_source")})
     return templates.TemplateResponse("watchlist.html", {
         "request": request,
         "items": items,
-        "all_providers": all_providers,
+        "stream_providers": stream_providers,
+        "buy_providers": buy_providers,
         "all_sources": all_sources,
     })
 

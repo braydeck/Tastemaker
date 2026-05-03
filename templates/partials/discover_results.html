@@ -39,12 +39,21 @@
       {% endif %}
       {% set providers = rec.watch_providers or [] %}
       {% if providers %}
-      <div class="flex items-center gap-1.5 mt-1.5">
-        {% for p in providers[:4] %}
-        <img src="https://image.tmdb.org/t/p/w45{{ p.logo_path }}"
-             alt="{{ p.name }}" title="{{ p.name }}"
-             class="w-5 h-5 rounded object-cover">
-        {% endfor %}
+      <div x-data="{ showNames: false }" class="mt-1.5">
+        <div class="flex items-center gap-1.5 cursor-pointer" @click="showNames = !showNames" title="Click to see names">
+          {% for p in providers %}
+          <img src="https://image.tmdb.org/t/p/w45{{ p.logo_path }}"
+               alt="{{ p.name }}"
+               class="w-5 h-5 rounded object-cover flex-shrink-0">
+          {% endfor %}
+        </div>
+        <div x-show="showNames" x-cloak class="flex flex-wrap gap-1 mt-1.5">
+          {% for p in providers %}
+          <span class="text-xs text-neutral-400 bg-neutral-800 px-1.5 py-0.5 rounded whitespace-nowrap">
+            {% if p.type == 'buy' %}<span class="text-neutral-600">buy · </span>{% endif %}{{ p.name }}
+          </span>
+          {% endfor %}
+        </div>
       </div>
       {% endif %}
     </div>

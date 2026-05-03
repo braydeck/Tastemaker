@@ -139,12 +139,31 @@
   {% if items %}
   <div x-data="{
     filter: 'all',
-    selectedProviders: [],
     selectedSource: '',
-    toggleProvider(name) {
-      const i = this.selectedProviders.indexOf(name);
-      if (i >= 0) this.selectedProviders.splice(i, 1);
-      else this.selectedProviders.push(name);
+    selectedStream: [],
+    selectedBuy: [],
+    streamOpen: false,
+    buyOpen: false,
+    init() {
+      const saved = JSON.parse(localStorage.getItem('wl_provider_filters') || '{}');
+      this.selectedStream = saved.selectedStream || [];
+      this.selectedBuy = saved.selectedBuy || [];
+    },
+    saveFilters() {
+      localStorage.setItem('wl_provider_filters', JSON.stringify({
+        selectedStream: this.selectedStream,
+        selectedBuy: this.selectedBuy
+      }));
+    },
+    toggleStream(name) {
+      const i = this.selectedStream.indexOf(name);
+      if (i >= 0) this.selectedStream.splice(i, 1); else this.selectedStream.push(name);
+      this.saveFilters();
+    },
+    toggleBuy(name) {
+      const i = this.selectedBuy.indexOf(name);
+      if (i >= 0) this.selectedBuy.splice(i, 1); else this.selectedBuy.push(name);
+      this.saveFilters();
     }
   }" class="mb-4">
 
@@ -173,35 +192,91 @@
     </div>
     {% endif %}
 
-    <!-- Streaming service filter -->
-    {% if all_providers %}
+    <!-- Stream / Buy dropdowns -->
+    {% if stream_providers or buy_providers %}
     <div class="flex items-center gap-2 flex-wrap mb-4">
-      <span class="text-xs text-neutral-600">Stream on:</span>
-      {% for p in all_providers %}
-      <button @click="toggleProvider('{{ p.name }}')"
-              :class="selectedProviders.includes('{{ p.name }}') ? 'ring-2 ring-white' : 'opacity-40 hover:opacity-70'"
-              class="rounded transition-all"
-              title="{{ p.name }}">
-        <img src="https://image.tmdb.org/t/p/w45{{ p.logo_path }}"
-             alt="{{ p.name }}" class="w-6 h-6 rounded">
-      </button>
-      {% endfor %}
-      <button x-show="selectedProviders.length > 0"
-              @click="selectedProviders = []"
-              class="text-xs text-neutral-500 hover:text-white transition-colors ml-1">
-        Clear
-      </button>
+      <span class="text-xs text-neutral-600">Available on:</span>
+
+      {% if stream_providers %}
+      <div class="relative" @click.outside="streamOpen = false">
+        <button @click="streamOpen = !streamOpen"
+                :class="selectedStream.length ? 'border-neutral-500 text-white' : 'border-neutral-800 text-neutral-400 hover:border-neutral-600'"
+                class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border transition-colors">
+          <span>Stream</span>
+          <span x-show="selectedStream.length" x-cloak
+                class="bg-white text-black text-xs font-semibold rounded-full w-4 h-4 flex items-center justify-center"
+                x-text="selectedStream.length"></span>
+          <svg class="w-3 h-3 text-neutral-500" :class="streamOpen && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+          </svg>
+        </button>
+        <div x-show="streamOpen" x-cloak
+             class="absolute top-full mt-1 left-0 z-30 bg-neutral-900 border border-neutral-700 rounded-xl shadow-2xl py-1 min-w-52">
+          {% for p in stream_providers %}
+          <label class="flex items-center gap-2.5 px-3 py-2 hover:bg-neutral-800 cursor-pointer">
+            <input type="checkbox"
+                   :checked="selectedStream.includes('{{ p.name | e }}')"
+                   @change="toggleStream('{{ p.name | e }}')"
+                   class="accent-white flex-shrink-0">
+            <img src="https://image.tmdb.org/t/p/w45{{ p.logo_path }}" alt="{{ p.name }}" class="w-5 h-5 rounded flex-shrink-0">
+            <span class="text-sm text-neutral-300">{{ p.name }}</span>
+          </label>
+          {% endfor %}
+          <div x-show="selectedStream.length" x-cloak class="border-t border-neutral-800 mt-1 pt-1 px-3 pb-1">
+            <button @click="selectedStream = []; saveFilters()" class="text-xs text-neutral-500 hover:text-white transition-colors">
+              Clear all
+            </button>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      {% if buy_providers %}
+      <div class="relative" @click.outside="buyOpen = false">
+        <button @click="buyOpen = !buyOpen"
+                :class="selectedBuy.length ? 'border-neutral-500 text-white' : 'border-neutral-800 text-neutral-400 hover:border-neutral-600'"
+                class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border transition-colors">
+          <span>Buy</span>
+          <span x-show="selectedBuy.length" x-cloak
+                class="bg-white text-black text-xs font-semibold rounded-full w-4 h-4 flex items-center justify-center"
+                x-text="selectedBuy.length"></span>
+          <svg class="w-3 h-3 text-neutral-500" :class="buyOpen && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+          </svg>
+        </button>
+        <div x-show="buyOpen" x-cloak
+             class="absolute top-full mt-1 left-0 z-30 bg-neutral-900 border border-neutral-700 rounded-xl shadow-2xl py-1 min-w-52">
+          {% for p in buy_providers %}
+          <label class="flex items-center gap-2.5 px-3 py-2 hover:bg-neutral-800 cursor-pointer">
+            <input type="checkbox"
+                   :checked="selectedBuy.includes('{{ p.name | e }}')"
+                   @change="toggleBuy('{{ p.name | e }}')"
+                   class="accent-white flex-shrink-0">
+            <img src="https://image.tmdb.org/t/p/w45{{ p.logo_path }}" alt="{{ p.name }}" class="w-5 h-5 rounded flex-shrink-0">
+            <span class="text-sm text-neutral-300">{{ p.name }}</span>
+          </label>
+          {% endfor %}
+          <div x-show="selectedBuy.length" x-cloak class="border-t border-neutral-800 mt-1 pt-1 px-3 pb-1">
+            <button @click="selectedBuy = []; saveFilters()" class="text-xs text-neutral-500 hover:text-white transition-colors">
+              Clear all
+            </button>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
     </div>
     {% endif %}
 
     <div class="space-y-2">
       {% for item in items %}
-      {% set provider_names = (item.watch_providers or []) | map(attribute='name') | list %}
       <div id="wl-{{ item._id }}"
-           data-providers='{{ provider_names | tojson }}'
+           data-providers='{{ (item.watch_providers or []) | tojson }}'
            x-show="(filter === 'all' || filter === '{{ item.medium }}') &&
-                   (selectedProviders.length === 0 ||
-                    JSON.parse($el.dataset.providers).some(p => selectedProviders.includes(p))) &&
+                   (selectedStream.length === 0 && selectedBuy.length === 0 ||
+                    JSON.parse($el.dataset.providers).some(p =>
+                      ((p.type || 'stream') === 'stream' && selectedStream.includes(p.name)) ||
+                      (p.type === 'buy' && selectedBuy.includes(p.name)))) &&
                    (selectedSource === '' || '{{ item.rec_source or '' }}' === selectedSource)"
            class="flex items-center gap-4 p-3 border border-neutral-800 rounded-lg hover:border-neutral-700 transition-colors">
         {% if item.poster_url %}
@@ -228,12 +303,21 @@
           {% endif %}
           {% set providers = item.watch_providers or [] %}
           {% if providers %}
-          <div class="flex items-center gap-1.5 mt-1.5">
-            {% for p in providers[:5] %}
-            <img src="https://image.tmdb.org/t/p/w45{{ p.logo_path }}"
-                 alt="{{ p.name }}" title="{{ p.name }}"
-                 class="w-5 h-5 rounded object-cover">
-            {% endfor %}
+          <div x-data="{ showNames: false }" class="mt-1.5">
+            <div class="flex items-center gap-1.5 cursor-pointer" @click="showNames = !showNames" title="Click to see names">
+              {% for p in providers %}
+              <img src="https://image.tmdb.org/t/p/w45{{ p.logo_path }}"
+                   alt="{{ p.name }}"
+                   class="w-5 h-5 rounded object-cover flex-shrink-0">
+              {% endfor %}
+            </div>
+            <div x-show="showNames" x-cloak class="flex flex-wrap gap-1 mt-1.5">
+              {% for p in providers %}
+              <span class="text-xs text-neutral-400 bg-neutral-800 px-1.5 py-0.5 rounded whitespace-nowrap">
+                {% if p.type == 'buy' %}<span class="text-neutral-600">buy · </span>{% endif %}{{ p.name }}
+              </span>
+              {% endfor %}
+            </div>
           </div>
           {% endif %}
         </div>
