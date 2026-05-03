@@ -698,6 +698,21 @@ async def log_submit(
         "enrichment_error": None,
     }).inserted_id
 
+    if not metadata:
+        try:
+            fetched_meta, fetched_poster, _ = enrich_rec(final_title, medium)
+            if fetched_meta:
+                enrich_updates: dict = {"metadata": fetched_meta, "metadata_enriched": True}
+                if fetched_poster:
+                    enrich_updates["poster_url"] = fetched_poster
+                canonical = fetched_meta.get("title") or fetched_meta.get("name") or fetched_meta.get("volumeInfo", {}).get("title")
+                if canonical:
+                    enrich_updates["title"] = canonical
+                    final_title = canonical
+                db["MediaLogs"].update_one({"_id": new_id}, {"$set": enrich_updates})
+        except Exception:
+            pass
+
     ranked = list(db["MediaLogs"].find(
         {"tier": tier, "rank_in_tier": {"$ne": None}, "_id": {"$ne": new_id}},
         {"_id": 1, "title": 1, "rank_in_tier": 1, "metadata": 1, "medium": 1},
@@ -1073,6 +1088,43 @@ async def watchlist_enrich_all(request: Request) -> HTMLResponse:
         return HTMLResponse(
             f'<span class="text-xs text-emerald-400">✓ Enriched {count} item{"s" if count != 1 else ""}. '
             f'<a href="/watchlist" class="underline hover:text-white">Reload to see changes →</a></span>'
+        )
+    return HTMLResponse('<span class="text-xs text-neutral-500">All items already enriched.</span>')
+
+
+@app.post("/library/enrich-all", response_class=HTMLResponse)
+async def library_enrich_all(request: Request) -> HTMLResponse:
+    db = get_db()
+    items = list(db["MediaLogs"].find({
+        "$or": [
+            {"metadata_enriched": False},
+            {"metadata_enriched": {"$exists": False}},
+            {"poster_url": None},
+        ]
+    }))
+    count = 0
+    for item in items:
+        medium = item.get("medium", "")
+        if not medium:
+            continue
+        try:
+            metadata, poster_url, _ = enrich_rec(item["title"], medium)
+            if not metadata:
+                continue
+            updates: dict = {"metadata": metadata, "metadata_enriched": True}
+            if poster_url and not item.get("poster_url"):
+                updates["poster_url"] = poster_url
+            canonical = metadata.get("title") or metadata.get("name") or metadata.get("volumeInfo", {}).get("title")
+            if canonical and canonical != item["title"]:
+                updates["title"] = canonical
+            db["MediaLogs"].update_one({"_id": item["_id"]}, {"$set": updates})
+            count += 1
+        except Exception:
+            pass
+    if count:
+        return HTMLResponse(
+            f'<span class="text-xs text-emerald-400">✓ Enriched {count} item{"s" if count != 1 else ""}. '
+            f'<a href="/" class="underline hover:text-white">Reload to see changes →</a></span>'
         )
     return HTMLResponse('<span class="text-xs text-neutral-500">All items already enriched.</span>')
 
