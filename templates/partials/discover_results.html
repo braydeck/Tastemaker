@@ -1,0 +1,98 @@
+{% if not recs %}
+{% if filtered_out %}
+<div class="text-sm text-neutral-500 space-y-2">
+  <p>All {{ filtered_out | length }} suggestions were already in your library, watchlist, or "not interested" list.</p>
+  <details class="text-xs text-neutral-600">
+    <summary class="cursor-pointer hover:text-neutral-400 transition-colors">Show filtered titles</summary>
+    <ul class="mt-2 space-y-0.5 pl-2">
+      {% for t in filtered_out %}<li>{{ t }}</li>{% endfor %}
+    </ul>
+  </details>
+  <p class="text-xs">Try generating again — Claude will pick different titles.</p>
+</div>
+{% else %}
+<p class="text-neutral-500 text-sm">No recommendations generated.</p>
+{% endif %}
+{% else %}
+<div class="space-y-3">
+  <p class="text-xs text-neutral-600 mb-4">{{ recs | length }} recommendations — add the ones you want to your Watchlist.</p>
+  {% for rec in recs %}
+  <div id="rec-{{ loop.index }}" class="flex items-center gap-3 p-3 border border-neutral-800 rounded-lg">
+    {% if rec.poster_url %}
+    <img src="{{ rec.poster_url }}" alt="{{ rec.title }}" class="w-8 h-12 object-cover rounded flex-shrink-0">
+    {% else %}
+    <div class="w-8 h-12 bg-neutral-800 rounded flex-shrink-0 flex items-center justify-center">
+      <span class="w-2 h-2 rounded-full {{ MEDIUM_DOT_CLASSES.get(rec.medium, 'bg-neutral-600') }}"></span>
+    </div>
+    {% endif %}
+
+    <div class="flex-1 min-w-0">
+      <p class="font-medium text-sm truncate">{{ rec.title }}</p>
+      <p class="text-xs text-neutral-500 capitalize">
+        {{ rec.medium }}
+        {% if rec.creator %} · {{ rec.creator }}{% endif %}
+        {% if rec.year %} · {{ rec.year }}{% endif %}
+      </p>
+      {% if rec.reason %}
+      <p class="text-xs text-neutral-400 mt-0.5 leading-relaxed">{{ rec.reason }}</p>
+      {% endif %}
+      {% set providers = rec.watch_providers or [] %}
+      {% if providers %}
+      <div class="flex items-center gap-1.5 mt-1.5">
+        {% for p in providers[:4] %}
+        <img src="https://image.tmdb.org/t/p/w45{{ p.logo_path }}"
+             alt="{{ p.name }}" title="{{ p.name }}"
+             class="w-5 h-5 rounded object-cover">
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="flex-shrink-0 flex flex-col gap-1.5">
+      <span id="rec-wl-{{ loop.index }}">
+        <form hx-post="/watchlist/add"
+              hx-target="#rec-wl-{{ loop.index }}"
+              hx-swap="innerHTML">
+          <input type="hidden" name="title" value="{{ rec.title | e }}">
+          <input type="hidden" name="medium" value="{{ rec.medium | e }}">
+          <input type="hidden" name="reason" value="{{ rec.reason | e }}">
+          <input type="hidden" name="sel_poster_url" value="{{ rec.poster_url or '' }}">
+          <button type="submit"
+                  class="w-full px-3 py-1.5 text-xs font-medium bg-neutral-800 hover:bg-neutral-700
+                         border border-neutral-700 rounded-lg transition-colors whitespace-nowrap">
+            + Watchlist
+          </button>
+        </form>
+      </span>
+      <span id="rec-lib-{{ loop.index }}">
+        <form hx-post="/library/add"
+              hx-target="#rec-lib-{{ loop.index }}"
+              hx-swap="innerHTML">
+          <input type="hidden" name="title" value="{{ rec.title | e }}">
+          <input type="hidden" name="medium" value="{{ rec.medium | e }}">
+          <input type="hidden" name="reason" value="{{ rec.reason | e }}">
+          <input type="hidden" name="sel_poster_url" value="{{ rec.poster_url or '' }}">
+          <button type="submit"
+                  class="w-full px-3 py-1.5 text-xs font-medium bg-neutral-900 hover:bg-neutral-800
+                         border border-neutral-800 rounded-lg transition-colors whitespace-nowrap text-neutral-400">
+            + Library
+          </button>
+        </form>
+      </span>
+      <form hx-post="/discover/blacklist"
+            hx-target="#rec-{{ loop.index }}"
+            hx-swap="outerHTML">
+        <input type="hidden" name="title" value="{{ rec.title | e }}">
+        <input type="hidden" name="medium" value="{{ rec.medium | e }}">
+        <button type="submit"
+                class="w-full px-3 py-1.5 text-xs font-medium bg-transparent hover:bg-neutral-900
+                       border border-neutral-800 rounded-lg transition-colors whitespace-nowrap text-neutral-600
+                       hover:text-neutral-400">
+          Not interested
+        </button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}

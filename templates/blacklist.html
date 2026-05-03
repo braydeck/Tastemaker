@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Not Interested · Tastemaker{% endblock %}
+{% block content %}
+
+<div class="max-w-2xl">
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-xl font-semibold">Not Interested</h1>
+      <p class="text-sm text-neutral-500 mt-1">
+        Titles hidden from Discover recommendations. Remove any you've changed your mind about.
+      </p>
+    </div>
+    <a href="/discover" class="text-sm text-neutral-400 hover:text-white transition-colors">← Back to Discover</a>
+  </div>
+
+  {% if not items %}
+  <p class="text-sm text-neutral-500">Nothing here yet. Click "Not interested" on any recommendation to hide it.</p>
+  {% else %}
+  <div id="blacklist-items" class="space-y-2">
+    {% for item in items %}
+    <div id="bl-{{ item._id }}" class="flex items-center justify-between px-4 py-3 border border-neutral-800 rounded-lg">
+      <div>
+        <p class="text-sm font-medium">{{ item.title }}</p>
+        <p class="text-xs text-neutral-500 capitalize">{{ item.medium }}</p>
+      </div>
+      <form hx-post="/discover/blacklist/remove/{{ item._id }}"
+            hx-target="#bl-{{ item._id }}"
+            hx-swap="outerHTML">
+        <button type="submit"
+                class="px-3 py-1.5 text-xs font-medium text-neutral-400 hover:text-white
+                       border border-neutral-700 hover:border-neutral-500 rounded-lg transition-colors">
+          Remove
+        </button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="text-xs text-neutral-600 mt-4">{{ items | length }} title{{ 's' if items | length != 1 }}</p>
+  {% endif %}
+</div>
+
+{% endblock %}
