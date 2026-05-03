@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}{{ item.title }} — Tastemaker{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+
+  <!-- Back link -->
+  <a href="/" class="inline-flex items-center gap-1.5 text-sm text-neutral-500 hover:text-white transition-colors mb-6">
+    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+    </svg>
+    Back to Library
+  </a>
+
+  <!-- Header -->
+  <div class="flex gap-6 mb-8">
+    {% if item.poster_url %}
+    <img src="{{ item.poster_url }}" alt="{{ item.title }}"
+         class="w-32 rounded-lg object-cover aspect-[2/3] flex-shrink-0 shadow-lg">
+    {% else %}
+    <div class="w-32 aspect-[2/3] bg-neutral-800 rounded-lg flex-shrink-0 flex items-center justify-center p-3">
+      <p class="text-xs text-neutral-500 text-center leading-tight">{{ item.title }}</p>
+    </div>
+    {% endif %}
+
+    <div class="flex flex-col justify-center gap-2">
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="w-2.5 h-2.5 rounded-full flex-shrink-0
+                     {{ MEDIUM_DOT_CLASSES.get(item.medium, 'bg-neutral-600') }}"></span>
+        <span class="text-xs text-neutral-500 capitalize">{{ item.medium }}</span>
+        {% if item.tier %}
+        <span class="text-xs font-bold px-2 py-0.5 rounded
+                     {{ TIER_BADGE_CLASSES.get(item.tier, 'bg-neutral-700 text-neutral-400') }}">
+          {{ TIER_NAMES.get(item.tier, "") }}
+        </span>
+        {% endif %}
+      </div>
+
+      <h1 class="text-2xl font-semibold leading-tight">{{ item.title }}</h1>
+
+      <p class="text-sm text-neutral-400">
+        {% if item.creator %}{{ item.creator }}{% endif %}
+        {% if item.creator and item.year %} · {% endif %}
+        {% if item.year %}{{ item.year }}{% endif %}
+      </p>
+
+      {% set tier = item.tier %}
+      {% set item_id = item._id %}
+      {% include "partials/tier_select.html" %}
+
+      {% if item.rank_in_tier and item.tier %}
+      <p class="text-xs text-neutral-600 mt-1">
+        Ranked in {{ TIER_NAMES.get(item.tier, "Tier " ~ item.tier) }}
+      </p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Fetch metadata (for unenriched items) -->
+  {% if not item.metadata_enriched or not item.metadata %}
+  <div id="fetch-meta-area" class="mb-6">
+    <button hx-post="/item/{{ item._id }}/fetch-metadata"
+            hx-target="#fetch-meta-area"
+            hx-swap="innerHTML"
+            hx-indicator="#fetch-spinner"
+            class="flex items-center gap-2 px-3 py-1.5 text-xs bg-neutral-800 hover:bg-neutral-700
+                   border border-neutral-700 rounded-lg transition-colors text-neutral-300">
+      <span id="fetch-spinner" class="htmx-indicator text-neutral-500">⟳</span>
+      Fetch metadata from API
+    </button>
+  </div>
+  {% endif %}
+
+  <!-- Genres -->
+  {% if genres %}
+  <div class="flex flex-wrap gap-2 mb-6">
+    {% for g in genres %}
+    <span class="text-xs px-2.5 py-1 rounded-full bg-neutral-800 text-neutral-400">{{ g }}</span>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Overview -->
+  {% if overview %}
+  <div x-data="{ expanded: false }" class="mb-8">
+    <p class="text-sm text-neutral-300 leading-relaxed"
+       :class="expanded ? '' : 'line-clamp-4'">{{ overview }}</p>
+    {% if overview | length > 300 %}
+    <button @click="expanded = !expanded"
+            class="text-xs text-neutral-500 hover:text-white mt-1 transition-colors">
+      <span x-text="expanded ? 'Show less' : 'Read more'">Read more</span>
+    </button>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- Dimension scores -->
+  {% set tags = item.psychological_tags or {} %}
+  {% if tags %}
+  <div class="mb-8">
+    <h2 class="text-xs font-semibold text-neutral-500 uppercase tracking-widest mb-4">Psychological Profile</h2>
+    <div class="space-y-3">
+      {% for dim in dims %}
+      {% set score = tags.get(dim) %}
+      {% if score is not none %}
+      <div>
+        <div class="flex justify-between items-baseline mb-1">
+          <div>
+            <span class="text-sm text-neutral-300">{{ DIMENSION_LABELS.get(dim, dim) }}</span>
+            <span class="text-xs text-neutral-600 ml-2">{{ DIMENSION_DEFINITIONS.get(dim, "") }}</span>
+          </div>
+          <span class="text-sm tabular-nums text-neutral-400 ml-4 flex-shrink-0">{{ "%.1f"|format(score) }}</span>
+        </div>
+        <div class="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+          <div class="h-full bg-neutral-400 rounded-full"
+               style="width: {{ ((score - 1) / 4 * 100) | round(1) }}%"></div>
+        </div>
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

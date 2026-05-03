@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Tastemaker{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+    body { background-color: #141414; }
+  </style>
+</head>
+<body class="text-white min-h-screen antialiased">
+
+  <nav class="border-b border-neutral-800 px-6 py-3 flex items-center gap-8 sticky top-0 z-50"
+       style="background-color:#141414;">
+    <a href="/" class="text-lg font-bold tracking-tight text-white">Tastemaker</a>
+    <div class="flex gap-6 text-sm">
+      <a href="/" class="text-neutral-400 hover:text-white transition-colors">Library</a>
+      <a href="/watchlist" class="text-neutral-400 hover:text-white transition-colors">Watchlist</a>
+      <a href="/discover" class="text-neutral-400 hover:text-white transition-colors">Discover</a>
+      <a href="/profile" class="text-neutral-400 hover:text-white transition-colors">Profile</a>
+      <a href="/onboard" class="text-neutral-400 hover:text-white transition-colors">Onboard</a>
+      <a href="/calibrate" class="text-neutral-400 hover:text-white transition-colors">Calibrate</a>
+      <a href="/log" class="text-neutral-400 hover:text-white transition-colors">Log</a>
+    </div>
+  </nav>
+
+  <main class="px-6 py-8 max-w-screen-2xl mx-auto">
+    {% block content %}{% endblock %}
+  </main>
+
+</body>
+</html>

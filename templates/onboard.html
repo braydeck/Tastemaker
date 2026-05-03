@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Onboard — Tastemaker{% endblock %}
+
+{% block content %}
+<div class="max-w-xl mx-auto">
+  <div class="mb-8">
+    <h1 class="text-2xl font-semibold mb-1">Preference Calibration</h1>
+    <p class="text-neutral-400 text-sm">
+      For each work, select what drove your enjoyment most and least.
+      This helps the engine understand your taste profile.
+    </p>
+  </div>
+
+  {% if not item %}
+    <div class="text-center py-16 text-neutral-500">
+      <p class="text-lg mb-2">No enriched Tier 1 items yet.</p>
+      <p class="text-sm">Run <code class="bg-neutral-800 px-1.5 py-0.5 rounded">python enrichment.py</code> first.</p>
+    </div>
+  {% else %}
+    <!-- Progress -->
+    <div class="mb-6">
+      <div class="flex justify-between text-xs text-neutral-500 mb-1">
+        <span>Item {{ item_num }} of {{ total }}</span>
+        <span>{{ ((item_num / total) * 100) | int }}%</span>
+      </div>
+      <div class="w-full bg-neutral-800 rounded-full h-1">
+        <div class="bg-white h-1 rounded-full transition-all duration-500"
+             style="width: {{ ((item_num / total) * 100) | int }}%"></div>
+      </div>
+    </div>
+
+    <div id="onboard-card">
+      {% include "partials/onboard_card.html" %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

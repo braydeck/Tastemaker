@@ -1,0 +1,15 @@
+<form hx-post="/item/{{ item_id }}/set-tier"
+      hx-trigger="change"
+      hx-target="this"
+      hx-swap="outerHTML">
+  <select name="tier"
+          class="bg-neutral-900 border border-neutral-700 rounded-lg px-2 py-1 text-xs text-white
+                 focus:outline-none focus:border-neutral-500 transition-colors cursor-pointer">
+    <option value="" {% if tier is none %}selected{% endif %}>— Untiered</option>
+    {% for t, name in TIER_NAMES.items() %}
+    {% if t is not none %}
+    <option value="{{ t }}" {% if tier == t %}selected{% endif %}>{{ name }}</option>
+    {% endif %}
+    {% endfor %}
+  </select>
+</form>

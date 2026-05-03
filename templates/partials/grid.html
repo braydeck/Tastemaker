@@ -1,0 +1,53 @@
+{% if not tier_groups %}
+<p class="text-neutral-500 text-center py-20">No items found.</p>
+{% else %}
+{% for tier, tier_items in tier_groups %}
+<section class="mb-10">
+  <h2 class="text-sm font-semibold text-neutral-500 uppercase tracking-widest mb-4">
+    {{ TIER_NAMES.get(tier, "Untiered") }}
+    <span class="text-neutral-700 ml-2 normal-case tracking-normal font-normal">{{ tier_items | length }}</span>
+  </h2>
+  <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+    {% for item in tier_items %}
+    <a href="/item/{{ item._id }}" class="relative group cursor-pointer block">
+      <div class="aspect-[2/3] rounded-md overflow-hidden bg-neutral-900">
+        {% if item.poster_url %}
+        <img src="{{ item.poster_url }}"
+             alt="{{ item.title }}"
+             class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+             loading="lazy">
+        {% else %}
+        <div class="w-full h-full flex items-end p-2 bg-neutral-900">
+          <p class="text-xs text-neutral-500 leading-tight line-clamp-4">{{ item.title }}</p>
+        </div>
+        {% endif %}
+
+        <!-- Tier badge -->
+        <span class="absolute top-1.5 right-1.5 text-xs font-bold px-1.5 py-0.5 rounded
+                     {{ TIER_BADGE_CLASSES.get(item.tier, 'bg-neutral-700 text-neutral-400') }}">
+          {% if item.tier %}T{{ item.tier }}{% else %}—{% endif %}
+        </span>
+
+        <!-- Medium dot -->
+        <span class="absolute top-1.5 left-1.5 w-2 h-2 rounded-full
+                     {{ MEDIUM_DOT_CLASSES.get(item.medium, 'bg-neutral-600') }}"></span>
+
+        <!-- Hover overlay -->
+        <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent
+                    opacity-0 group-hover:opacity-100 transition-opacity duration-200
+                    flex flex-col justify-end p-2.5">
+          <p class="text-xs font-semibold leading-tight line-clamp-2">{{ item.title }}</p>
+          {% if item.year %}
+          <p class="text-xs text-neutral-400 mt-0.5">{{ item.year }}</p>
+          {% endif %}
+          {% if item.creator %}
+          <p class="text-xs text-neutral-500 truncate">{{ item.creator }}</p>
+          {% endif %}
+        </div>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endfor %}
+{% endif %}

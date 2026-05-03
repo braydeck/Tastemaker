@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}Taste Profile — Tastemaker{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+
+  <!-- Header + stats -->
+  <div class="mb-10">
+    <h1 class="text-2xl font-semibold mb-2">Taste Profile</h1>
+    <div class="flex flex-wrap gap-3 text-xs text-neutral-500">
+      <span class="px-2.5 py-1 bg-neutral-800 rounded-full">{{ total }} logged</span>
+      <span class="px-2.5 py-1 bg-neutral-800 rounded-full">{{ tier_counts.get(1, 0) }} Tier 1</span>
+      <span class="px-2.5 py-1 bg-neutral-800 rounded-full">{{ tier_counts.get(2, 0) }} Tier 2</span>
+      <span class="px-2.5 py-1 bg-neutral-800 rounded-full">{{ enriched }} profiled</span>
+      <span class="px-2.5 py-1 bg-neutral-800 rounded-full">{{ loved_count }} used for taste model</span>
+    </div>
+  </div>
+
+  <!-- ── Taste Clusters ─────────────────────────────── -->
+  {% if clusters %}
+  <section class="mb-12">
+    <h2 class="text-xs font-semibold text-neutral-500 uppercase tracking-widest mb-6">Your Taste Clusters</h2>
+    <p class="text-sm text-neutral-500 mb-6 -mt-4">Natural facets found in your library via k-means clustering. Your taste isn't one thing.</p>
+
+    <div class="space-y-6">
+      {% for cluster in clusters %}
+      <div class="border border-neutral-800 rounded-xl p-5 hover:border-neutral-700 transition-colors">
+        <div class="flex items-start justify-between gap-4 mb-4">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-3 mb-1">
+              <h3 class="text-lg font-semibold">{{ cluster.name }}</h3>
+              <span class="text-xs text-neutral-600 flex-shrink-0">{{ cluster.size }} titles</span>
+            </div>
+            <p class="text-sm text-neutral-400 leading-relaxed">{{ cluster.description }}</p>
+          </div>
+          <div class="flex flex-col gap-2 flex-shrink-0">
+            <a href="/discover?cluster={{ cluster.cluster_id }}"
+               class="px-3 py-1.5 text-xs font-medium bg-neutral-800 hover:bg-neutral-700
+                      border border-neutral-700 rounded-lg transition-colors whitespace-nowrap text-center">
+              Recommend from this →
+            </a>
+            <a href="/?cluster_id={{ cluster.cluster_id }}"
+               class="px-3 py-1.5 text-xs font-medium bg-neutral-900 hover:bg-neutral-800
+                      border border-neutral-800 rounded-lg transition-colors whitespace-nowrap text-center text-neutral-400">
+              Browse library →
+            </a>
+          </div>
+        </div>
+
+        <div class="flex gap-6">
+          <!-- Exemplar posters -->
+          <div class="flex gap-2 flex-shrink-0">
+            {% for ex in cluster.exemplars %}
+            <a href="/item/{{ ex._id }}" class="group">
+              {% if ex.poster_url %}
+              <img src="{{ ex.poster_url }}" alt="{{ ex.title }}"
+                   title="{{ ex.title }}"
+                   class="w-10 h-14 object-cover rounded shadow-md group-hover:opacity-80 transition-opacity">
+              {% else %}
+              <div class="w-10 h-14 bg-neutral-800 rounded flex items-center justify-center">
+                <span class="w-2 h-2 rounded-full {{ MEDIUM_DOT_CLASSES.get(ex.medium, 'bg-neutral-600') }}"></span>
+              </div>
+              {% endif %}
+            </a>
+            {% endfor %}
+          </div>
+
+          <!-- Centroid bars (top 5 dims) -->
+          <div class="flex-1 space-y-1.5 min-w-0">
+            {% for row in cluster.centroid_rows[:5] %}
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-neutral-500 w-32 flex-shrink-0 truncate">{{ row.label }}</span>
+              <div class="flex-1 h-1 bg-neutral-800 rounded-full overflow-hidden">
+                <div class="h-full bg-neutral-400 rounded-full" style="width: {{ row.bar_pct }}%"></div>
+              </div>
+              <span class="text-xs text-neutral-600 tabular-nums w-6 text-right flex-shrink-0">{{ "%.1f"|format(row.score) }}</span>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% else %}
+  <div class="mb-12 p-6 border border-neutral-800 rounded-xl text-neutral-500 text-sm">
+    No clusters yet. Run <code class="text-neutral-300">python3 cluster.py</code> to generate taste clusters.
+  </div>
+  {% endif %}
+
+  <!-- ── Dimension Profile ─────────────────────────── -->
+  <section class="mb-12">
+    <h2 class="text-xs font-semibold text-neutral-500 uppercase tracking-widest mb-6">Overall Dimension Profile</h2>
+    <p class="text-sm text-neutral-500 mb-6 -mt-4">Average scores across your Tier 1 + Tier 2 items.</p>
+
+    <div class="space-y-3">
+      {% for row in by_score %}
+      <div>
+        <div class="flex items-baseline justify-between mb-1">
+          <div>
+            <span class="text-sm text-neutral-300">{{ row.label }}</span>
+            <span class="text-xs text-neutral-600 ml-2">{{ row.definition }}</span>
+          </div>
+          <span class="text-sm tabular-nums text-neutral-400 ml-4 flex-shrink-0">{{ "%.2f"|format(row.loved) }}</span>
+        </div>
+        <div class="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+          <div class="h-full bg-neutral-400 rounded-full" style="width: {{ row.bar_pct }}%"></div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- ── Signal Strength ──────────────────────────── -->
+  {% if by_delta %}
+  <section class="mb-12">
+    <h2 class="text-xs font-semibold text-neutral-500 uppercase tracking-widest mb-6">Signal Strength</h2>
+    <p class="text-sm text-neutral-500 mb-6 -mt-4">Which dimensions most distinguish what you love from what doesn't work. High delta = strong predictor of enjoyment.</p>
+
+    <div class="divide-y divide-neutral-900">
+      {% for row in by_delta %}
+      <div class="flex items-center justify-between py-2.5 gap-4">
+        <span class="text-sm text-neutral-300 w-44 flex-shrink-0">{{ row.label }}</span>
+        <div class="flex items-center gap-3 flex-1 min-w-0 text-xs text-neutral-500">
+          <span>Loved: <span class="text-neutral-300 tabular-nums">{{ "%.2f"|format(row.loved) }}</span></span>
+          <span>·</span>
+          <span>Didn't Work: <span class="text-neutral-300 tabular-nums">{{ "%.2f"|format(row.disliked) }}</span></span>
+        </div>
+        {% if row.delta >= 0.5 %}
+          <span class="text-xs font-mono tabular-nums text-emerald-400 flex-shrink-0">Δ +{{ "%.2f"|format(row.delta) }}</span>
+        {% elif row.delta >= 0.2 %}
+          <span class="text-xs font-mono tabular-nums text-yellow-500 flex-shrink-0">Δ +{{ "%.2f"|format(row.delta) }}</span>
+        {% elif row.delta >= 0 %}
+          <span class="text-xs font-mono tabular-nums text-neutral-600 flex-shrink-0">Δ +{{ "%.2f"|format(row.delta) }}</span>
+        {% else %}
+          <span class="text-xs font-mono tabular-nums text-red-400 flex-shrink-0">Δ {{ "%.2f"|format(row.delta) }}</span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    <p class="text-xs text-neutral-600 mt-4">Red or near-zero delta means this dimension doesn't predict enjoyment for you — the model weights it less for recommendations.</p>
+  </section>
+  {% endif %}
+
+  <!-- ── Onboarding Votes ──────────────────────────── -->
+  {% if cluster_rows %}
+  <section class="mb-12">
+    <h2 class="text-xs font-semibold text-neutral-500 uppercase tracking-widest mb-6">Explicit Priorities</h2>
+    <p class="text-sm text-neutral-500 mb-6 -mt-4">What you said mattered during onboarding (MaxDiff sessions).</p>
+
+    <div class="space-y-2">
+      {% for row in cluster_rows %}
+      <div class="flex items-center gap-4">
+        <span class="text-sm text-neutral-300 w-44 flex-shrink-0">{{ row.label }}</span>
+        <div class="flex gap-2">
+          {% if row.most > 0 %}
+          <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-900/40 text-emerald-400">↑{{ row.most }} most</span>
+          {% endif %}
+          {% if row.least > 0 %}
+          <span class="text-xs px-2 py-0.5 rounded-full bg-red-900/40 text-red-400">↓{{ row.least }} least</span>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+</div>
+{% endblock %}

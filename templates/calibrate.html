@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Calibrate — Tastemaker{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+  <div class="mb-8">
+    <h1 class="text-2xl font-semibold mb-1">Calibration</h1>
+    <p class="text-neutral-400 text-sm">
+      Review and correct LLM-assigned scores for your Tier 1 items.
+      Confirmed scores become ground-truth anchors for future enrichment runs.
+    </p>
+  </div>
+
+  {% if not items %}
+    <div class="text-center py-16 text-neutral-500">
+      <p>No enriched Tier 1 items found.</p>
+    </div>
+  {% else %}
+    <form hx-post="/calibrate/save" hx-target="#save-result">
+
+      <div class="space-y-2 mb-8">
+        {% for item in items %}
+        <div x-data="{ open: false }"
+             class="border border-neutral-800 rounded-lg overflow-hidden">
+
+          <!-- Item header (click to expand) -->
+          <button type="button"
+                  @click="open = !open"
+                  class="w-full flex items-center gap-4 p-4 text-left hover:bg-neutral-900 transition-colors">
+            {% if item.poster_url %}
+            <img src="{{ item.poster_url }}" alt="{{ item.title }}"
+                 class="w-8 h-12 object-cover rounded flex-shrink-0">
+            {% else %}
+            <div class="w-8 h-12 bg-neutral-800 rounded flex-shrink-0"></div>
+            {% endif %}
+            <div class="flex-1 min-w-0">
+              <p class="font-medium truncate">{{ item.title }}</p>
+              <p class="text-xs text-neutral-500 capitalize">{{ item.medium }}{% if item.year %} · {{ item.year }}{% endif %}</p>
+            </div>
+            <svg x-show="!open" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-neutral-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+            <svg x-show="open" x-cloak xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-neutral-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+            </svg>
+          </button>
+
+          <!-- Sliders (collapsed by default) -->
+          <div x-show="open" x-cloak class="px-4 pb-4 border-t border-neutral-800 pt-4">
+            <div class="space-y-4">
+              {% set item_dims = DIMENSIONS + (["sdt_autonomy", "sdt_competence"] if item.medium == "game" else []) %}
+              {% for dim in item_dims %}
+              {% set score = item.psychological_tags.get(dim, 3.0) %}
+              <div>
+                <div class="flex justify-between items-baseline mb-1">
+                  <div>
+                    <span class="text-sm font-medium">{{ DIMENSION_LABELS[dim] }}</span>
+                    <span class="text-xs text-neutral-500 ml-2">{{ DIMENSION_DEFINITIONS[dim] }}</span>
+                  </div>
+                  <span class="text-sm text-neutral-300 min-w-[2.5rem] text-right tabular-nums"
+                        id="val_{{ item._id }}_{{ dim }}">{{ "%.1f"|format(score) }}</span>
+                </div>
+                <input
+                  type="range"
+                  name="{{ item._id }}__{{ dim }}"
+                  min="1.0" max="5.0" step="0.1"
+                  value="{{ "%.1f"|format(score) }}"
+                  oninput="document.getElementById('val_{{ item._id }}_{{ dim }}').textContent = parseFloat(this.value).toFixed(1)"
+                  class="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-white bg-neutral-700">
+                <div class="flex justify-between text-xs text-neutral-600 mt-0.5">
+                  <span>1.0</span><span>5.0</span>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="flex items-center gap-4">
+        <button type="submit"
+                class="px-6 py-2.5 bg-white text-black font-semibold rounded-lg hover:bg-neutral-200 transition-colors">
+          Save Calibration
+        </button>
+        <div id="save-result" class="text-sm text-neutral-400"></div>
+      </div>
+
+    </form>
+  {% endif %}
+</div>
+{% endblock %}

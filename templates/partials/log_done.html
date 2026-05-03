@@ -1,0 +1,23 @@
+<div class="text-center py-10">
+  <div class="text-4xl mb-4">✓</div>
+  <h2 class="text-2xl font-semibold mb-1">{{ title }}</h2>
+  <p class="text-neutral-400 text-sm">
+    Added to {{ TIER_NAMES.get(tier, "Tier " ~ tier) }}
+    {% if rank %}
+    <span class="text-neutral-600 ml-1">· rank {{ "%.2f"|format(rank) }}</span>
+    {% endif %}
+  </p>
+  <p class="text-xs text-neutral-600 mt-2">
+    Run <code class="bg-neutral-800 px-1 py-0.5 rounded">python enrichment.py</code> to enrich this entry.
+  </p>
+  <div class="flex gap-3 justify-center mt-7">
+    <a href="/log"
+       class="px-5 py-2 bg-neutral-800 text-white rounded-lg hover:bg-neutral-700 transition-colors text-sm">
+      Log Another
+    </a>
+    <a href="/"
+       class="px-5 py-2 bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors text-sm font-medium">
+      View Library
+    </a>
+  </div>
+</div>

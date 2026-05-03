@@ -1,0 +1,44 @@
+<div class="text-center py-6">
+  <!-- New entry -->
+  <div class="mb-6">
+    <p class="text-xs text-neutral-500 uppercase tracking-widest mb-1">New Entry</p>
+    <h2 class="text-2xl font-bold">{{ new_title }}</h2>
+  </div>
+
+  <div class="text-neutral-600 text-2xl font-light mb-6">vs.</div>
+
+  <!-- Existing item -->
+  <div class="flex flex-col items-center gap-3 mb-8">
+    {% if compare_item.poster_url %}
+    <img src="{{ compare_item.poster_url }}" alt="{{ compare_item.title }}"
+         class="w-20 rounded-md object-cover aspect-[2/3]">
+    {% endif %}
+    <div>
+      <h3 class="text-xl font-semibold">{{ compare_item.title }}</h3>
+      {% if compare_item.year %}
+      <p class="text-neutral-400 text-sm mt-0.5">{{ compare_item.year }}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <p class="text-neutral-400 text-sm mb-6">
+    Is <strong class="text-white">{{ new_title }}</strong>
+    better or worse than
+    <strong class="text-white">{{ compare_item.title }}</strong>?
+  </p>
+
+  <!-- Single form, two submit buttons -->
+  <form hx-post="/log/compare" hx-target="#log-area" hx-swap="innerHTML">
+    <input type="hidden" name="session_id" value="{{ session_id }}">
+    <div class="flex gap-4 justify-center">
+      <button type="submit" name="result" value="better"
+              class="px-8 py-3 bg-emerald-700 hover:bg-emerald-600 text-white font-semibold rounded-lg transition-colors">
+        ↑ Better
+      </button>
+      <button type="submit" name="result" value="worse"
+              class="px-8 py-3 bg-red-900 hover:bg-red-800 text-white font-semibold rounded-lg transition-colors">
+        ↓ Worse
+      </button>
+    </div>
+  </form>
+</div>

@@ -1,0 +1,7 @@
+.env
+exports/
+.igdb_token
+__pycache__/
+*.pyc
+.venv/
+venv/

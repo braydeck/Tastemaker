@@ -1,0 +1,72 @@
+<form x-data="{ most: '', least: '' }"
+      hx-post="/onboard/response"
+      hx-target="#onboard-card"
+      hx-swap="innerHTML">
+
+  <!-- Cover + title -->
+  <div class="flex gap-5 mb-7">
+    {% if item.poster_url %}
+    <img src="{{ item.poster_url }}" alt="{{ item.title }}"
+         class="w-20 rounded-md object-cover aspect-[2/3] flex-shrink-0">
+    {% else %}
+    <div class="w-20 aspect-[2/3] bg-neutral-800 rounded-md flex-shrink-0 flex items-center justify-center p-2">
+      <p class="text-xs text-neutral-500 text-center leading-tight">{{ item.title }}</p>
+    </div>
+    {% endif %}
+    <div class="flex flex-col justify-center">
+      <h2 class="text-xl font-semibold leading-tight">{{ item.title }}</h2>
+      {% if item.year %}<p class="text-neutral-400 text-sm mt-0.5">{{ item.year }}</p>{% endif %}
+      <span class="text-xs text-neutral-500 capitalize mt-1 inline-block">{{ item.medium }}</span>
+    </div>
+  </div>
+
+  <!-- Instruction -->
+  <p class="text-sm text-neutral-400 mb-4">What drove your enjoyment?</p>
+
+  <!-- Dimension rows -->
+  <div class="space-y-2 mb-6">
+    {% for key, label, score in dims %}
+    <div class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-neutral-900 border border-neutral-800">
+      <span class="flex-1 text-sm">{{ label }}</span>
+      <span class="text-xs text-neutral-500 tabular-nums w-8 text-right">{{ "%.1f"|format(score) }}</span>
+
+      <!-- MOST -->
+      <label class="flex items-center gap-1.5 cursor-pointer select-none"
+             :class="{ 'opacity-30 cursor-not-allowed': least === '{{ key }}' }">
+        <input type="radio" name="most" value="{{ key }}"
+               x-model="most"
+               :disabled="least === '{{ key }}'"
+               class="accent-emerald-400"
+               required>
+        <span class="text-xs font-medium text-emerald-400">Most</span>
+      </label>
+
+      <!-- LEAST -->
+      <label class="flex items-center gap-1.5 cursor-pointer select-none"
+             :class="{ 'opacity-30 cursor-not-allowed': most === '{{ key }}' }">
+        <input type="radio" name="least" value="{{ key }}"
+               x-model="least"
+               :disabled="most === '{{ key }}'"
+               class="accent-red-400"
+               required>
+        <span class="text-xs font-medium text-red-400">Least</span>
+      </label>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Hidden state -->
+  <input type="hidden" name="media_id" value="{{ item._id }}">
+  <input type="hidden" name="session_id" value="{{ session_id }}">
+  <input type="hidden" name="remaining_ids" value="{{ remaining_ids }}">
+  <input type="hidden" name="item_num" value="{{ item_num }}">
+  <input type="hidden" name="total" value="{{ total }}">
+
+  <button type="submit"
+          :disabled="!most || !least"
+          class="w-full py-3 bg-white text-black font-semibold rounded-lg
+                 hover:bg-neutral-200 transition-colors
+                 disabled:opacity-30 disabled:cursor-not-allowed">
+    Next →
+  </button>
+</form>

@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% block title %}Watchlist — Tastemaker{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+  <div class="flex items-start justify-between mb-8 gap-4 flex-wrap">
+    <div>
+      <h1 class="text-2xl font-semibold mb-1">Watchlist</h1>
+      <p class="text-neutral-400 text-sm">Things you want to read, watch, or play.</p>
+    </div>
+
+    <!-- Add form -->
+    <div x-data="{
+      open: false,
+      query: '',
+      medium: 'movie',
+      results: [],
+      selected: null,
+      loading: false,
+      async doSearch() {
+        if (this.query.length < 2) { this.results = []; return; }
+        this.loading = true;
+        try {
+          const r = await fetch('/api/search?q=' + encodeURIComponent(this.query) + '&medium=' + this.medium);
+          this.results = await r.json();
+        } catch(e) { this.results = []; }
+        this.loading = false;
+      },
+      select(item) {
+        this.selected = item;
+        this.query = item.title;
+        this.results = [];
+      },
+      reset() {
+        this.query = ''; this.medium = 'movie';
+        this.results = []; this.selected = null;
+      }
+    }" class="flex-shrink-0" @keydown.escape="results = []">
+      <button @click="open = !open"
+              class="px-4 py-2 bg-white text-black text-sm font-semibold rounded-lg hover:bg-neutral-200 transition-colors">
+        + Add
+      </button>
+      <div x-show="open" x-cloak
+           class="absolute right-6 mt-2 w-80 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl p-4 z-50">
+        <form hx-post="/watchlist/add"
+              hx-target="#add-result"
+              hx-swap="innerHTML"
+              @htmx:after-request="open = false; reset()"
+              class="space-y-3">
+
+          <!-- Hidden selection fields -->
+          <input type="hidden" name="tmdb_id" :value="selected?.tmdb_id || 0">
+          <input type="hidden" name="books_id" :value="selected?.books_id || ''">
+          <input type="hidden" name="igdb_id" :value="selected?.igdb_id || 0">
+          <input type="hidden" name="sel_year" :value="selected?.year || ''">
+          <input type="hidden" name="sel_creator" :value="selected?.creator || ''">
+          <input type="hidden" name="sel_poster_url" :value="selected?.poster_url || ''">
+
+          <div>
+            <label class="block text-xs text-neutral-400 mb-1">Medium</label>
+            <select name="medium" x-model="medium" @change="results = []; selected = null" required
+                    class="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-white
+                           focus:outline-none focus:border-neutral-500">
+              <option value="movie">Movie</option>
+              <option value="tv">TV</option>
+              <option value="book">Book</option>
+              <option value="game">Game</option>
+            </select>
+          </div>
+
+          <div class="relative">
+            <label class="block text-xs text-neutral-400 mb-1">Title</label>
+            <div class="relative">
+              <input type="text" name="title" x-model="query" required
+                     @input.debounce.400ms="doSearch()"
+                     @focus="if (query.length >= 2 && !selected) doSearch()"
+                     placeholder="e.g. Severance"
+                     class="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-white
+                            placeholder-neutral-600 focus:outline-none focus:border-neutral-500 pr-8">
+              <span x-show="loading" class="absolute right-2 top-2.5 text-neutral-500 text-xs">⟳</span>
+            </div>
+
+            <!-- Search results dropdown -->
+            <div x-show="results.length > 0"
+                 class="absolute z-10 w-full mt-1 bg-neutral-800 border border-neutral-700 rounded-lg overflow-hidden shadow-xl max-h-60 overflow-y-auto">
+              <template x-for="item in results" :key="item.tmdb_id || item.books_id || item.title">
+                <button type="button" @click="select(item)"
+                        class="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-neutral-700 text-left border-b border-neutral-700 last:border-0">
+                  <template x-if="item.poster_url">
+                    <img :src="item.poster_url" class="w-6 h-9 object-cover rounded flex-shrink-0">
+                  </template>
+                  <template x-if="!item.poster_url">
+                    <div class="w-6 h-9 bg-neutral-700 rounded flex-shrink-0"></div>
+                  </template>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm text-white truncate" x-text="item.title"></p>
+                    <p class="text-xs text-neutral-500 truncate"
+                       x-text="[item.creator, item.year].filter(Boolean).join(' · ')"></p>
+                  </div>
+                </button>
+              </template>
+              <p x-show="results.length === 0 && query.length >= 2 && !loading"
+                 class="text-xs text-neutral-500 px-3 py-2">No results — you can still add manually.</p>
+            </div>
+          </div>
+
+          <!-- Selected item preview -->
+          <div x-show="selected" class="flex items-center gap-2 p-2 bg-neutral-800 rounded-lg">
+            <template x-if="selected?.poster_url">
+              <img :src="selected.poster_url" class="w-6 h-9 object-cover rounded flex-shrink-0">
+            </template>
+            <div class="flex-1 min-w-0">
+              <p class="text-xs font-medium text-white truncate" x-text="selected?.title"></p>
+              <p class="text-xs text-neutral-500"
+                 x-text="[selected?.creator, selected?.year].filter(Boolean).join(' · ')"></p>
+            </div>
+            <button type="button" @click="selected = null"
+                    class="text-neutral-600 hover:text-neutral-400 text-xs flex-shrink-0">✕</button>
+          </div>
+
+          <div>
+            <label class="block text-xs text-neutral-400 mb-1">Reason <span class="text-neutral-600">(optional)</span></label>
+            <input type="text" name="reason" placeholder="Why are you interested?"
+                   class="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-white
+                          placeholder-neutral-600 focus:outline-none focus:border-neutral-500">
+          </div>
+          <button type="submit"
+                  class="w-full py-2 bg-white text-black text-sm font-semibold rounded-lg hover:bg-neutral-200 transition-colors">
+            Add to Watchlist
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="add-result" class="mb-4"></div>
+
+  <!-- Medium filter -->
+  {% if items %}
+  <div x-data="{ filter: 'all' }" class="mb-4">
+    <div class="flex gap-2 flex-wrap mb-4">
+      {% for label, value in [("All", "all"), ("Movies", "movie"), ("TV", "tv"), ("Books", "book"), ("Games", "game")] %}
+      <button @click="filter = '{{ value }}'"
+              :class="filter === '{{ value }}' ? 'bg-white text-black' : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'"
+              class="px-3 py-1 rounded-full text-xs font-medium transition-colors">
+        {{ label }}
+      </button>
+      {% endfor %}
+    </div>
+
+    <div class="space-y-2">
+      {% for item in items %}
+      <div id="wl-{{ item._id }}"
+           x-show="filter === 'all' || filter === '{{ item.medium }}'"
+           class="flex items-center gap-4 p-3 border border-neutral-800 rounded-lg hover:border-neutral-700 transition-colors">
+        {% if item.poster_url %}
+        <img src="{{ item.poster_url }}" alt="{{ item.title }}"
+             class="w-8 h-12 object-cover rounded flex-shrink-0">
+        {% else %}
+        <div class="w-8 h-12 bg-neutral-800 rounded flex-shrink-0 flex items-center justify-center">
+          <span class="w-2 h-2 rounded-full {{ MEDIUM_DOT_CLASSES.get(item.medium, 'bg-neutral-600') }}"></span>
+        </div>
+        {% endif %}
+
+        <div class="flex-1 min-w-0">
+          <p class="font-medium text-sm truncate">{{ item.title }}</p>
+          <p class="text-xs text-neutral-500 capitalize">
+            {{ item.medium }}
+            {% if item.creator %} · {{ item.creator }}{% endif %}
+            {% if item.year %} · {{ item.year }}{% endif %}
+            {% if item.source == "llm_recommendation" %} · <span class="text-purple-400">Recommended</span>{% endif %}
+          </p>
+          {% if item.reason %}
+          <p class="text-xs text-neutral-400 mt-1 leading-relaxed">{{ item.reason }}</p>
+          {% endif %}
+          {% set providers = item.watch_providers or [] %}
+          {% if providers %}
+          <div class="flex items-center gap-1.5 mt-1.5">
+            {% for p in providers[:5] %}
+            <img src="https://image.tmdb.org/t/p/w45{{ p.logo_path }}"
+                 alt="{{ p.name }}" title="{{ p.name }}"
+                 class="w-5 h-5 rounded object-cover">
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="flex gap-2 flex-shrink-0">
+          <form hx-post="/watchlist/promote/{{ item._id }}"
+                hx-target="#wl-{{ item._id }}"
+                hx-swap="outerHTML">
+            <button type="submit"
+                    class="px-3 py-1.5 text-xs font-medium bg-neutral-800 hover:bg-neutral-700 rounded-lg transition-colors">
+              Mark Watched →
+            </button>
+          </form>
+          <button hx-post="/watchlist/remove/{{ item._id }}"
+                  hx-target="#wl-{{ item._id }}"
+                  hx-swap="outerHTML"
+                  class="px-3 py-1.5 text-xs text-neutral-500 hover:text-red-400 hover:bg-neutral-800 rounded-lg transition-colors">
+            Remove
+          </button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if not items %}
+  <div class="text-center py-20 text-neutral-500">
+    <p>Your watchlist is empty.</p>
+    <p class="text-sm mt-1">Add items manually or generate recommendations from <a href="/discover" class="underline hover:text-white">Discover</a>.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
