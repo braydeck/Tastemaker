@@ -719,7 +719,7 @@ async def log_submit(
             pass
 
     ranked = list(db["MediaLogs"].find(
-        {"tier": tier, "rank_in_tier": {"$ne": None}, "_id": {"$ne": new_id}},
+        {"tier": tier, "medium": medium, "rank_in_tier": {"$ne": None}, "_id": {"$ne": new_id}},
         {"_id": 1, "title": 1, "rank_in_tier": 1, "metadata": 1, "medium": 1},
     ).sort("rank_in_tier", 1))
 
@@ -770,7 +770,10 @@ async def log_compare(
     ranked_ids: list[str] = session["ranked_ids"]
     mid = (low + high) // 2
 
-    if result == "better":
+    if result == "na":
+        ranked_ids = ranked_ids[:mid] + ranked_ids[mid + 1:]
+        high = high - 1
+    elif result == "better":
         high = mid
     else:
         low = mid + 1
@@ -807,7 +810,7 @@ async def log_compare(
 
     db["EnrichmentQueue"].update_one(
         {"session_id": session_id},
-        {"$set": {"low": low, "high": high}},
+        {"$set": {"low": low, "high": high, "ranked_ids": ranked_ids}},
     )
     new_mid = (low + high) // 2
     compare_doc = db["MediaLogs"].find_one(

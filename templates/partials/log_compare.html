@@ -27,7 +27,7 @@
     <strong class="text-white">{{ compare_item.title }}</strong>?
   </p>
 
-  <!-- Single form, two submit buttons -->
+  <!-- Single form, three submit buttons -->
   <form hx-post="/log/compare" hx-target="#log-area" hx-swap="innerHTML">
     <input type="hidden" name="session_id" value="{{ session_id }}">
     <div class="flex gap-4 justify-center">
@@ -38,6 +38,10 @@
       <button type="submit" name="result" value="worse"
               class="px-8 py-3 bg-red-900 hover:bg-red-800 text-white font-semibold rounded-lg transition-colors">
         ↓ Worse
+      </button>
+      <button type="submit" name="result" value="na"
+              class="px-8 py-3 bg-neutral-700 hover:bg-neutral-600 text-neutral-300 font-semibold rounded-lg transition-colors">
+        N/A
       </button>
     </div>
   </form>
