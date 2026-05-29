@@ -31,6 +31,11 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
 TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w300"
 TMDB_KEY = os.environ.get("TMDB_API_KEY", "")
 BOOKS_KEY = os.environ.get("GOOGLE_BOOKS_API_KEY", "")
