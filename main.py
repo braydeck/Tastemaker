@@ -306,7 +306,7 @@ async def api_search(
                 f"{TMDB_BASE}/search/{endpoint}",
                 params={"query": q, "api_key": TMDB_KEY},
             )
-            for r in resp.json().get("results", [])[:6]:
+            for r in resp.json().get("results", [])[:10]:
                 date_field = "release_date" if medium == "movie" else "first_air_date"
                 year_str = r.get(date_field, "")
                 year = int(year_str[:4]) if year_str and year_str[:4].isdigit() else None
@@ -324,7 +324,7 @@ async def api_search(
         elif medium == "book":
             resp = get_with_backoff(
                 "https://www.googleapis.com/books/v1/volumes",
-                params={"q": q, "key": BOOKS_KEY, "maxResults": 6},
+                params={"q": q, "key": BOOKS_KEY, "maxResults": 10},
             )
             for item in resp.json().get("items", []):
                 info = item.get("volumeInfo", {})
@@ -347,8 +347,9 @@ async def api_search(
             body = (
                 f'search "{q}"; '
                 "fields name,summary,genres.name,first_release_date,cover.url,"
-                "involved_companies.company.name,involved_companies.developer; "
-                "limit 6;"
+                "involved_companies.company.name,involved_companies.developer,category; "
+                "where category != (1,5,6,7,13,14); "
+                "limit 10;"
             )
             resp, _ = igdb_request(body, token)
             for r in resp.json():
@@ -946,6 +947,115 @@ async def fetch_metadata(request: Request, item_id: str) -> HTMLResponse:
     return HTMLResponse(
         f'<p class="text-emerald-400 text-xs">✓ Metadata fetched for <strong>{canonical_title}</strong>.'
         f" Reload to see full details.</p>{poster_html}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Manual re-enrich by explicit API ID
+# ---------------------------------------------------------------------------
+
+@app.post("/item/{item_id}/re-enrich", response_class=HTMLResponse)
+async def re_enrich(
+    request: Request,
+    item_id: str,
+    tmdb_id: int = Form(0),
+    igdb_id: int = Form(0),
+    books_id: str = Form(""),
+) -> HTMLResponse:
+    db = get_db()
+    try:
+        doc = db["MediaLogs"].find_one({"_id": ObjectId(item_id)})
+    except Exception:
+        return HTMLResponse("<p class='text-red-400 text-xs'>Invalid ID.</p>")
+    if not doc:
+        return HTMLResponse("<p class='text-red-400 text-xs'>Item not found.</p>")
+
+    medium = doc.get("medium", "")
+    metadata: dict = {}
+    poster_url: str | None = None
+    updates: dict = {}
+
+    try:
+        if tmdb_id:
+            metadata = fetch_tmdb_by_id(tmdb_id, medium)
+            canonical = metadata.get("title") if medium == "movie" else metadata.get("name")
+            if canonical:
+                updates["title"] = canonical
+            date_field = "release_date" if medium == "movie" else "first_air_date"
+            if metadata.get(date_field):
+                updates["year"] = int(metadata[date_field][:4])
+            if metadata.get("poster_path"):
+                poster_url = f"{TMDB_IMAGE_BASE}{metadata['poster_path']}"
+            if medium == "tv":
+                cb = metadata.get("created_by") or []
+                if cb:
+                    updates["creator"] = cb[0]["name"]
+        elif igdb_id:
+            token = get_igdb_token()
+            body = (
+                f"fields name,summary,genres.name,first_release_date,cover.url,"
+                f"rating,rating_count,"
+                f"involved_companies.company.name,involved_companies.developer; "
+                f"where id = {igdb_id}; limit 1;"
+            )
+            resp, _ = igdb_request(body, token)
+            results = resp.json()
+            if results:
+                metadata = dict(results[0])
+                updates["title"] = metadata.get("name", doc["title"])
+                if metadata.get("first_release_date"):
+                    updates["year"] = datetime.utcfromtimestamp(metadata["first_release_date"]).year
+                cover = metadata.get("cover") or {}
+                if cover.get("url"):
+                    poster_url = "https:" + cover["url"].replace("t_thumb", "t_cover_big")
+                devs = [
+                    c["company"]["name"]
+                    for c in (metadata.get("involved_companies") or [])
+                    if c.get("developer") and isinstance(c.get("company"), dict)
+                ]
+                if devs:
+                    updates["creator"] = devs[0]
+        elif books_id:
+            resp = get_with_backoff(
+                f"https://www.googleapis.com/books/v1/volumes/{books_id}",
+                params={"key": BOOKS_KEY},
+            )
+            info = resp.json().get("volumeInfo", {})
+            metadata = info
+            if info.get("title"):
+                updates["title"] = info["title"]
+            year_str = info.get("publishedDate", "")
+            if year_str and year_str[:4].isdigit():
+                updates["year"] = int(year_str[:4])
+            authors = info.get("authors") or []
+            if authors:
+                updates["creator"] = ", ".join(authors)
+            links = info.get("imageLinks") or {}
+            thumb = links.get("thumbnail") or links.get("smallThumbnail")
+            if thumb:
+                poster_url = thumb.replace("http://", "https://")
+    except Exception as exc:
+        return HTMLResponse(f"<p class='text-red-400 text-xs'>Error: {str(exc)[:120]}</p>")
+
+    if not metadata:
+        return HTMLResponse("<p class='text-neutral-500 text-xs'>No data returned from API.</p>")
+
+    updates.update({
+        "metadata": metadata,
+        "poster_url": poster_url,
+        "metadata_enriched": True,
+        "psychological_tags": {},
+        "enrichment_error": None,
+    })
+    db["MediaLogs"].update_one({"_id": ObjectId(item_id)}, {"$set": updates})
+
+    canonical_title = updates.get("title", doc["title"])
+    poster_html = f'<img src="{poster_url}" class="w-16 rounded shadow mt-2">' if poster_url else ""
+    return HTMLResponse(
+        f'<div id="re-enrich-area" class="mb-6">'
+        f'<p class="text-emerald-400 text-xs">✓ Metadata updated for <strong>{canonical_title}</strong>. '
+        f'<a href="/item/{item_id}" class="underline">Reload</a> to see full details.</p>'
+        f"{poster_html}</div>"
     )
 
 

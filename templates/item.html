@@ -58,7 +58,7 @@
 
   <!-- Fetch metadata (for unenriched items) -->
   {% if not item.metadata_enriched or not item.metadata %}
-  <div id="fetch-meta-area" class="mb-6">
+  <div id="fetch-meta-area" class="mb-4">
     <button hx-post="/item/{{ item._id }}/fetch-metadata"
             hx-target="#fetch-meta-area"
             hx-swap="innerHTML"
@@ -70,6 +70,65 @@
     </button>
   </div>
   {% endif %}
+
+  <!-- Manual re-search -->
+  <div id="re-enrich-area" class="mb-6"
+       x-data="{
+         open: false,
+         query: '{{ item.title | replace("'", "\\'") }}',
+         results: [],
+         loading: false,
+         picking: false,
+         async search() {
+           if (this.query.length < 2) { this.results = []; return; }
+           this.loading = true;
+           const r = await fetch('/api/search?q=' + encodeURIComponent(this.query) + '&medium={{ item.medium }}');
+           this.results = await r.json();
+           this.loading = false;
+         },
+         async pick(r) {
+           this.picking = true;
+           const fd = new FormData();
+           fd.append('tmdb_id', r.tmdb_id || 0);
+           fd.append('igdb_id', r.igdb_id || 0);
+           fd.append('books_id', r.books_id || '');
+           await fetch('/item/{{ item._id }}/re-enrich', { method: 'POST', body: fd });
+           window.location.reload();
+         }
+       }">
+    <button @click="open = !open; if (open && results.length === 0) search()"
+            class="flex items-center gap-2 px-3 py-1.5 text-xs bg-neutral-800 hover:bg-neutral-700
+                   border border-neutral-700 rounded-lg transition-colors text-neutral-300">
+      Fix / Re-search metadata
+    </button>
+
+    <div x-show="open" x-transition class="mt-3 space-y-2">
+      <input x-model="query" @input.debounce.300ms="search()"
+             class="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm
+                    text-white placeholder-neutral-500 focus:outline-none focus:border-neutral-500"
+             placeholder="Search title...">
+
+      <p x-show="loading" class="text-neutral-500 text-xs">Searching...</p>
+      <p x-show="picking" class="text-neutral-400 text-xs">Updating metadata...</p>
+
+      <template x-for="r in results" :key="(r.igdb_id || 0) + (r.tmdb_id || 0) + (r.books_id || '')">
+        <div class="flex items-center gap-3 p-2 bg-neutral-800/60 rounded-lg border border-neutral-700/50">
+          <img x-show="r.poster_url" :src="r.poster_url"
+               class="w-10 rounded flex-shrink-0 aspect-[2/3] object-cover">
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-medium text-white truncate"
+               x-text="r.title + (r.year ? ' (' + r.year + ')' : '')"></p>
+            <p class="text-xs text-neutral-400 truncate" x-text="r.creator || r.overview"></p>
+          </div>
+          <button @click="pick(r)"
+                  class="px-3 py-1 text-xs bg-neutral-700 hover:bg-neutral-600 text-white rounded
+                         transition-colors flex-shrink-0">
+            Use
+          </button>
+        </div>
+      </template>
+    </div>
+  </div>
 
   <!-- Genres -->
   {% if genres %}
