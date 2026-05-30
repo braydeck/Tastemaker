@@ -347,12 +347,19 @@ async def api_search(
             body = (
                 f'search "{q}"; '
                 "fields name,summary,genres.name,first_release_date,cover.url,"
-                "involved_companies.company.name,involved_companies.developer,category; "
-                "where category != (1,5,6,7,13,14); "
-                "limit 10;"
+                "involved_companies.company.name,involved_companies.developer,"
+                "parent_game,version_parent; "
+                "limit 20;"
             )
             resp, _ = igdb_request(body, token)
-            for r in resp.json():
+            raw = resp.json()
+            result_ids = {r["id"] for r in raw}
+            igdb_results = [
+                r for r in raw
+                if not r.get("version_parent")  # exclude edition variants
+                and r.get("parent_game") not in result_ids  # exclude DLC of a game in results
+            ][:10]
+            for r in igdb_results:
                 year = None
                 if r.get("first_release_date"):
                     year = datetime.utcfromtimestamp(r["first_release_date"]).year
@@ -375,8 +382,8 @@ async def api_search(
                     "poster_url": cover_url,
                     "overview": (r.get("summary") or "")[:120],
                 })
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"[api_search] error for medium={medium} q={q!r}: {exc}")
     return JSONResponse(results)
 
 

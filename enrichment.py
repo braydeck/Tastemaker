@@ -372,11 +372,18 @@ def fetch_igdb(title: str, token: str) -> tuple[dict | None, str]:
     body = (
         f'search "{title}"; '
         "fields name,summary,genres.name,themes.name,first_release_date,cover.url,"
-        "rating,rating_count,involved_companies.company.name,involved_companies.developer; "
-        "limit 1;"
+        "rating,rating_count,involved_companies.company.name,involved_companies.developer,"
+        "parent_game,version_parent; "
+        "limit 10;"
     )
     resp, token = igdb_request(body, token)
-    results = resp.json()
+    raw = resp.json()
+    result_ids = {r["id"] for r in raw}
+    results = [
+        r for r in raw
+        if not r.get("version_parent")
+        and r.get("parent_game") not in result_ids
+    ]
     if not results:
         return None, token
     result = dict(results[0])
