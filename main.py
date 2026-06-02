@@ -641,15 +641,20 @@ async def log_submit(
             if metadata.get("poster_path"):
                 poster_url = f"{TMDB_IMAGE_BASE}{metadata['poster_path']}"
             if not creator:
-                if medium == "tv":
-                    cb = metadata.get("created_by") or []
-                    if cb:
-                        creator = cb[0]["name"]
-                elif medium == "movie":
+                if medium == "movie":
                     crew = (metadata.get("credits") or {}).get("crew") or []
                     directors = [c["name"] for c in crew if c.get("job") == "Director"]
                     if directors:
                         creator = directors[0]
+                elif medium == "tv":
+                    cb = metadata.get("created_by") or []
+                    if cb:
+                        creator = cb[0]["name"]
+                    else:
+                        crew = (metadata.get("credits") or {}).get("crew") or []
+                        eps = [c["name"] for c in crew if c.get("job") == "Executive Producer"]
+                        if eps:
+                            creator = eps[0]
         except Exception:
             pass
     elif igdb_id:
@@ -731,6 +736,21 @@ async def log_submit(
                 db["MediaLogs"].update_one({"_id": new_id}, {"$set": enrich_updates})
         except Exception:
             pass
+
+    # Auto-rank any unranked items in this tier+medium so they participate in comparisons
+    unranked = list(db["MediaLogs"].find(
+        {"tier": tier, "medium": medium, "rank_in_tier": None, "_id": {"$ne": new_id}},
+        {"_id": 1},
+    ))
+    if unranked:
+        max_rank = db["MediaLogs"].find_one(
+            {"tier": tier, "medium": medium, "rank_in_tier": {"$ne": None}},
+            {"rank_in_tier": 1},
+            sort=[("rank_in_tier", -1)],
+        )
+        start = (max_rank["rank_in_tier"] + 1.0) if max_rank else 1.0
+        for i, u in enumerate(unranked):
+            db["MediaLogs"].update_one({"_id": u["_id"]}, {"$set": {"rank_in_tier": start + i}})
 
     ranked = list(db["MediaLogs"].find(
         {"tier": tier, "medium": medium, "rank_in_tier": {"$ne": None}, "_id": {"$ne": new_id}},
@@ -869,35 +889,30 @@ async def fetch_metadata(request: Request, item_id: str) -> HTMLResponse:
             )
             results = resp.json().get("results", [])
             if results:
-                metadata = dict(results[0])
-                tmdb_id = metadata["id"]
+                tmdb_id = results[0]["id"]
+                metadata = fetch_tmdb_by_id(tmdb_id, medium)
                 if metadata.get("poster_path"):
                     poster_url = f"{TMDB_IMAGE_BASE}{metadata['poster_path']}"
-                try:
-                    wp_resp = get_with_backoff(
-                        f"{TMDB_BASE}/{endpoint}/{tmdb_id}/watch/providers",
-                        params={"api_key": TMDB_KEY},
-                    )
-                    us = wp_resp.json().get("results", {}).get("US", {})
-                    metadata["watch_providers"] = [
-                        {"name": p["provider_name"], "logo_path": p["logo_path"], "type": "stream"}
-                        for p in us.get("flatrate", [])
-                    ] + [
-                        {"name": p["provider_name"], "logo_path": p["logo_path"], "type": "buy"}
-                        for p in us.get("buy", [])
-                    ]
-                except Exception:
-                    pass
                 canonical = metadata.get("title") if medium == "movie" else metadata.get("name")
                 if canonical:
                     updates["title"] = canonical
                 date_field = "release_date" if medium == "movie" else "first_air_date"
                 if metadata.get(date_field):
                     updates["year"] = int(metadata[date_field][:4])
-                if medium == "tv":
+                if medium == "movie":
+                    crew = (metadata.get("credits") or {}).get("crew") or []
+                    directors = [c["name"] for c in crew if c.get("job") == "Director"]
+                    if directors:
+                        updates["creator"] = directors[0]
+                elif medium == "tv":
                     cb = metadata.get("created_by") or []
                     if cb:
                         updates["creator"] = cb[0]["name"]
+                    else:
+                        crew = (metadata.get("credits") or {}).get("crew") or []
+                        eps = [c["name"] for c in crew if c.get("job") == "Executive Producer"]
+                        if eps:
+                            updates["creator"] = eps[0]
         elif medium == "game":
             token = get_igdb_token()
             body = (
@@ -999,10 +1014,20 @@ async def re_enrich(
                 updates["year"] = int(metadata[date_field][:4])
             if metadata.get("poster_path"):
                 poster_url = f"{TMDB_IMAGE_BASE}{metadata['poster_path']}"
-            if medium == "tv":
+            if medium == "movie":
+                crew = (metadata.get("credits") or {}).get("crew") or []
+                directors = [c["name"] for c in crew if c.get("job") == "Director"]
+                if directors:
+                    updates["creator"] = directors[0]
+            elif medium == "tv":
                 cb = metadata.get("created_by") or []
                 if cb:
                     updates["creator"] = cb[0]["name"]
+                else:
+                    crew = (metadata.get("credits") or {}).get("crew") or []
+                    eps = [c["name"] for c in crew if c.get("job") == "Executive Producer"]
+                    if eps:
+                        updates["creator"] = eps[0]
         elif igdb_id:
             token = get_igdb_token()
             body = (
@@ -1303,15 +1328,20 @@ async def watchlist_add(
                 poster_url = f"{TMDB_IMAGE_BASE}{metadata['poster_path']}"
             watch_providers = metadata.get("watch_providers", [])
             if not creator:
-                if medium == "tv":
-                    cb = metadata.get("created_by") or []
-                    if cb:
-                        creator = cb[0]["name"]
-                elif medium == "movie":
+                if medium == "movie":
                     crew = (metadata.get("credits") or {}).get("crew") or []
                     directors = [c["name"] for c in crew if c.get("job") == "Director"]
                     if directors:
                         creator = directors[0]
+                elif medium == "tv":
+                    cb = metadata.get("created_by") or []
+                    if cb:
+                        creator = cb[0]["name"]
+                    else:
+                        crew = (metadata.get("credits") or {}).get("crew") or []
+                        eps = [c["name"] for c in crew if c.get("job") == "Executive Producer"]
+                        if eps:
+                            creator = eps[0]
         except Exception:
             pass
     elif igdb_id:
