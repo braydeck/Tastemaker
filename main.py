@@ -306,7 +306,7 @@ async def api_search(
                 f"{TMDB_BASE}/search/{endpoint}",
                 params={"query": q, "api_key": TMDB_KEY},
             )
-            for r in resp.json().get("results", [])[:10]:
+            for r in resp.json().get("results", [])[:20]:
                 date_field = "release_date" if medium == "movie" else "first_air_date"
                 year_str = r.get(date_field, "")
                 year = int(year_str[:4]) if year_str and year_str[:4].isdigit() else None
@@ -324,7 +324,7 @@ async def api_search(
         elif medium == "book":
             resp = get_with_backoff(
                 "https://www.googleapis.com/books/v1/volumes",
-                params={"q": q, "key": BOOKS_KEY, "maxResults": 10},
+                params={"q": q, "key": BOOKS_KEY, "maxResults": 20},
             )
             for item in resp.json().get("items", []):
                 info = item.get("volumeInfo", {})
@@ -358,7 +358,7 @@ async def api_search(
                 r for r in raw
                 if not r.get("version_parent")  # exclude edition variants
                 and r.get("parent_game") not in result_ids  # exclude DLC of a game in results
-            ][:10]
+            ][:20]
             for r in igdb_results:
                 year = None
                 if r.get("first_release_date"):
