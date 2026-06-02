@@ -130,6 +130,30 @@
     </div>
   </div>
 
+  <!-- Delete -->
+  <div x-data="{ confirm: false }" class="mb-6">
+    <button x-show="!confirm" @click="confirm = true"
+            class="flex items-center gap-2 px-3 py-1.5 text-xs bg-neutral-800 hover:bg-red-900/40
+                   border border-neutral-700 hover:border-red-800 rounded-lg transition-colors text-neutral-500 hover:text-red-400">
+      Delete from library
+    </button>
+    <div x-show="confirm" x-transition class="flex items-center gap-3">
+      <span class="text-xs text-red-400">Are you sure?</span>
+      <form method="POST" action="/item/{{ item._id }}/delete">
+        <button type="submit"
+                class="px-3 py-1.5 text-xs bg-red-900/60 hover:bg-red-800 border border-red-800
+                       rounded-lg transition-colors text-red-300">
+          Yes, delete
+        </button>
+      </form>
+      <button @click="confirm = false"
+              class="px-3 py-1.5 text-xs bg-neutral-800 hover:bg-neutral-700 border border-neutral-700
+                     rounded-lg transition-colors text-neutral-400">
+        Cancel
+      </button>
+    </div>
+  </div>
+
   <!-- Genres -->
   {% if genres %}
   <div class="flex flex-wrap gap-2 mb-6">

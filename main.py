@@ -349,7 +349,7 @@ async def api_search(
                 "fields name,summary,genres.name,first_release_date,cover.url,"
                 "involved_companies.company.name,involved_companies.developer,"
                 "parent_game,version_parent; "
-                "limit 20;"
+                "limit 50;"
             )
             resp, _ = igdb_request(body, token)
             raw = resp.json()
@@ -1083,6 +1083,13 @@ async def set_tier(request: Request, item_id: str, tier: str = Form(...)) -> HTM
         "item_id": item_id,
         "tier": tier_int,
     })
+
+
+@app.post("/item/{item_id}/delete")
+async def item_delete(request: Request, item_id: str):
+    db = get_db()
+    db["MediaLogs"].delete_one({"_id": ObjectId(item_id)})
+    return RedirectResponse("/", status_code=303)
 
 
 # ---------------------------------------------------------------------------
