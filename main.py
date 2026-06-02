@@ -161,7 +161,7 @@ def get_poster_url(item: dict) -> str | None:
 def fetch_tmdb_by_id(tmdb_id: int, medium: str) -> dict:
     """Fetch full TMDB metadata + US watch providers for a known TMDB ID."""
     endpoint = "movie" if medium == "movie" else "tv"
-    resp = get_with_backoff(f"{TMDB_BASE}/{endpoint}/{tmdb_id}", params={"api_key": TMDB_KEY})
+    resp = get_with_backoff(f"{TMDB_BASE}/{endpoint}/{tmdb_id}", params={"api_key": TMDB_KEY, "append_to_response": "credits"})
     data = dict(resp.json())
     try:
         wp_resp = get_with_backoff(
@@ -640,10 +640,16 @@ async def log_submit(
                 year_int = int(metadata[date_field][:4])
             if metadata.get("poster_path"):
                 poster_url = f"{TMDB_IMAGE_BASE}{metadata['poster_path']}"
-            if not creator and medium == "tv":
-                cb = metadata.get("created_by") or []
-                if cb:
-                    creator = cb[0]["name"]
+            if not creator:
+                if medium == "tv":
+                    cb = metadata.get("created_by") or []
+                    if cb:
+                        creator = cb[0]["name"]
+                elif medium == "movie":
+                    crew = (metadata.get("credits") or {}).get("crew") or []
+                    directors = [c["name"] for c in crew if c.get("job") == "Director"]
+                    if directors:
+                        creator = directors[0]
         except Exception:
             pass
     elif igdb_id:
@@ -1296,10 +1302,16 @@ async def watchlist_add(
             if metadata.get("poster_path"):
                 poster_url = f"{TMDB_IMAGE_BASE}{metadata['poster_path']}"
             watch_providers = metadata.get("watch_providers", [])
-            if not creator and medium == "tv":
-                cb = metadata.get("created_by") or []
-                if cb:
-                    creator = cb[0]["name"]
+            if not creator:
+                if medium == "tv":
+                    cb = metadata.get("created_by") or []
+                    if cb:
+                        creator = cb[0]["name"]
+                elif medium == "movie":
+                    crew = (metadata.get("credits") or {}).get("crew") or []
+                    directors = [c["name"] for c in crew if c.get("job") == "Director"]
+                    if directors:
+                        creator = directors[0]
         except Exception:
             pass
     elif igdb_id:
