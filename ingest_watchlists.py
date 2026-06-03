@@ -23,7 +23,7 @@ from dotenv import load_dotenv
 from db import get_db
 from enrichment import (
     TMDB_BASE,
-    fetch_google_books,
+    fetch_open_library,
     fetch_tmdb_genre_map,
     get_with_backoff,
 )
@@ -32,7 +32,6 @@ load_dotenv()
 
 EXPORTS = Path(__file__).parent / "exports"
 TMDB_KEY = os.environ["TMDB_API_KEY"]
-BOOKS_KEY = os.environ["GOOGLE_BOOKS_API_KEY"]
 TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w300"
 
 
@@ -77,8 +76,7 @@ def poster_url_from_metadata(medium: str, metadata: dict) -> str | None:
         return f"{TMDB_IMAGE_BASE}{p}" if p else None
     if medium == "book":
         links = metadata.get("imageLinks") or {}
-        url = links.get("thumbnail") or links.get("smallThumbnail")
-        return url.replace("http://", "https://") if url else None
+        return links.get("thumbnail")
     return None
 
 
@@ -180,7 +178,7 @@ def main() -> None:
             if medium in ("movie", "tv"):
                 metadata = fetch_tmdb_with_providers(title, medium, genre_map) or {}
             else:
-                metadata = fetch_google_books(title, item.get("creator", "")) or {}
+                metadata = fetch_open_library(title, item.get("creator", "")) or {}
             poster_url = poster_url_from_metadata(medium, metadata)
             status = "OK" if metadata else "no_match"
         except Exception as exc:

@@ -10,7 +10,7 @@ To re-tag all already-enriched records with a new dimension set
     python enrichment.py --retag
 
 Execution order per record:
-  1. Fetch external metadata if not already stored (TMDB / Google Books / IGDB)
+  1. Fetch external metadata if not already stored (TMDB / Open Library / IGDB)
   2. Run LLM psychological tagging (claude-sonnet-4-20250514)
   3. Update MediaLogs document in MongoDB
 """
@@ -393,18 +393,93 @@ def fetch_igdb(title: str, token: str) -> tuple[dict | None, str]:
     return result, token
 
 
-def fetch_google_books(title: str, creator: str) -> dict | None:
-    query = f"intitle:{title}"
+def _normalize_ol_doc(doc: dict, description: str = "") -> dict:
+    """Normalize an Open Library search doc or work into Google Books-compatible shape."""
+    year = doc.get("first_publish_year")
+    authors = doc.get("author_name") or doc.get("authors") or []
+    if authors and isinstance(authors[0], dict):
+        authors = [a.get("name", "") for a in authors]
+    subjects = doc.get("subject") or doc.get("subjects") or []
+    if subjects and isinstance(subjects[0], dict):
+        subjects = [s.get("name", s) if isinstance(s, dict) else str(s) for s in subjects]
+    cover_id = doc.get("cover_i")
+    cover_edition = doc.get("cover_edition_key")
+    covers = doc.get("covers") or []
+    image_links = {}
+    if cover_id:
+        image_links["thumbnail"] = f"https://covers.openlibrary.org/b/id/{cover_id}-M.jpg"
+    elif cover_edition:
+        image_links["thumbnail"] = f"https://covers.openlibrary.org/b/olid/{cover_edition}-M.jpg"
+    elif covers:
+        cid = next((c for c in covers if c > 0), None)
+        if cid:
+            image_links["thumbnail"] = f"https://covers.openlibrary.org/b/id/{cid}-M.jpg"
+    # Normalize description
+    if not description:
+        desc_raw = doc.get("description") or ""
+        if isinstance(desc_raw, dict):
+            description = desc_raw.get("value", "")
+        else:
+            description = desc_raw
+    ol_key = doc.get("key", "")
+    return {
+        "title": doc.get("title", ""),
+        "publishedDate": str(year) if year else "",
+        "authors": authors,
+        "description": description,
+        "categories": subjects[:10],
+        "imageLinks": image_links,
+        "ol_key": ol_key,
+    }
+
+
+def fetch_open_library(title: str, creator: str) -> dict | None:
+    """Search Open Library and return the best match in normalized shape."""
+    q = title
     if creator:
-        query += f"+inauthor:{creator}"
+        q += f" {creator}"
     resp = get_with_backoff(
-        "https://www.googleapis.com/books/v1/volumes",
-        params={"q": query, "key": os.environ["GOOGLE_BOOKS_API_KEY"], "maxResults": 1},
+        "https://openlibrary.org/search.json",
+        params={"q": q, "limit": 1, "fields": "key,title,author_name,first_publish_year,cover_i,cover_edition_key,subject"},
     )
-    items = resp.json().get("items", [])
-    if not items:
+    docs = resp.json().get("docs") or []
+    if not docs:
         return None
-    return items[0].get("volumeInfo", {})
+    doc = docs[0]
+    # Fetch work details for description
+    description = ""
+    work_key = doc.get("key", "")
+    if work_key:
+        try:
+            work_resp = get_with_backoff(f"https://openlibrary.org{work_key}.json")
+            work_data = work_resp.json()
+            desc_raw = work_data.get("description") or ""
+            description = desc_raw.get("value", "") if isinstance(desc_raw, dict) else desc_raw
+        except Exception:
+            pass
+    return _normalize_ol_doc(doc, description)
+
+
+def fetch_open_library_by_key(ol_key: str) -> dict | None:
+    """Fetch a specific Open Library work by key and return normalized metadata."""
+    if not ol_key:
+        return None
+    url = f"https://openlibrary.org{ol_key}.json" if ol_key.startswith("/") else f"https://openlibrary.org/works/{ol_key}.json"
+    resp = get_with_backoff(url)
+    data = resp.json()
+    # Get author names (works only have author references)
+    authors = []
+    for a in data.get("authors") or []:
+        ref = a.get("author", a)
+        author_key = ref.get("key") if isinstance(ref, dict) else None
+        if author_key:
+            try:
+                ar = get_with_backoff(f"https://openlibrary.org{author_key}.json")
+                authors.append(ar.json().get("name", ""))
+            except Exception:
+                pass
+    data["authors"] = authors
+    return _normalize_ol_doc(data)
 
 
 # ---------------------------------------------------------------------------
@@ -670,7 +745,7 @@ def main() -> None:
                 elif medium == "game":
                     metadata, igdb_token = fetch_igdb(title, igdb_token)
                 else:
-                    metadata = fetch_google_books(title, doc.get("creator", ""))
+                    metadata = fetch_open_library(title, doc.get("creator", ""))
 
                 if metadata is None:
                     db["MediaLogs"].update_one(

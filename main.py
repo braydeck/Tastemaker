@@ -19,7 +19,8 @@ from db import get_db
 from enrichment import (
     IGDB_API_URL,
     TMDB_BASE,
-    fetch_google_books,
+    fetch_open_library,
+    fetch_open_library_by_key,
     get_igdb_token,
     get_with_backoff,
     igdb_request,
@@ -38,7 +39,6 @@ def health():
 
 TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w300"
 TMDB_KEY = os.environ.get("TMDB_API_KEY", "")
-BOOKS_KEY = os.environ.get("GOOGLE_BOOKS_API_KEY", "")
 
 # Universal dimensions (all media). Games additionally have sdt_autonomy + sdt_competence
 # stored in psychological_tags but those are not in this list for the calibration/onboard UI.
@@ -153,8 +153,7 @@ def get_poster_url(item: dict) -> str | None:
         return f"{TMDB_IMAGE_BASE}{p}" if p else None
     if medium == "book":
         links = metadata.get("imageLinks") or {}
-        url = links.get("thumbnail") or links.get("smallThumbnail")
-        return url.replace("http://", "https://") if url else None
+        return links.get("thumbnail")
     return None
 
 
@@ -182,7 +181,7 @@ def fetch_tmdb_by_id(tmdb_id: int, medium: str) -> dict:
 
 
 def enrich_rec(title: str, medium: str) -> tuple[dict, str | None, list]:
-    """Fetch metadata, poster_url, watch_providers for a title via TMDB or Google Books."""
+    """Fetch metadata, poster_url, watch_providers for a title via TMDB or Open Library."""
     metadata: dict = {}
     poster_url: str | None = None
     watch_providers: list = []
@@ -215,12 +214,10 @@ def enrich_rec(title: str, medium: str) -> tuple[dict, str | None, list]:
                 except Exception:
                     pass
         elif medium == "book":
-            metadata = fetch_google_books(title, "") or {}
+            metadata = fetch_open_library(title, "") or {}
             if metadata:
                 links = metadata.get("imageLinks") or {}
-                url = links.get("thumbnail") or links.get("smallThumbnail")
-                if url:
-                    poster_url = url.replace("http://", "https://")
+                poster_url = links.get("thumbnail")
         elif medium == "game":
             token = get_igdb_token()
             body = (
@@ -323,24 +320,27 @@ async def api_search(
                 })
         elif medium == "book":
             resp = get_with_backoff(
-                "https://www.googleapis.com/books/v1/volumes",
-                params={"q": q, "key": BOOKS_KEY, "maxResults": 20},
+                "https://openlibrary.org/search.json",
+                params={"q": q, "limit": 20, "fields": "key,title,author_name,first_publish_year,cover_i,cover_edition_key,subject"},
             )
-            for item in resp.json().get("items", []):
-                info = item.get("volumeInfo", {})
-                year_str = info.get("publishedDate", "")
-                year = int(year_str[:4]) if year_str and year_str[:4].isdigit() else None
-                links = info.get("imageLinks") or {}
-                thumb = links.get("thumbnail") or links.get("smallThumbnail")
+            for doc in resp.json().get("docs") or []:
+                year = doc.get("first_publish_year")
+                cover_id = doc.get("cover_i")
+                cover_edition = doc.get("cover_edition_key")
+                thumb = None
+                if cover_id:
+                    thumb = f"https://covers.openlibrary.org/b/id/{cover_id}-M.jpg"
+                elif cover_edition:
+                    thumb = f"https://covers.openlibrary.org/b/olid/{cover_edition}-M.jpg"
                 results.append({
-                    "title": info.get("title", ""),
+                    "title": doc.get("title", ""),
                     "year": year,
                     "tmdb_id": 0,
-                    "books_id": item["id"],
+                    "books_id": doc.get("key", ""),
                     "igdb_id": 0,
-                    "creator": ", ".join(info.get("authors", [])),
-                    "poster_url": thumb.replace("http://", "https://") if thumb else None,
-                    "overview": (info.get("description") or "")[:120],
+                    "creator": ", ".join(doc.get("author_name") or []),
+                    "poster_url": thumb,
+                    "overview": ", ".join((doc.get("subject") or [])[:5]),
                 })
         elif medium == "game":
             token = get_igdb_token()
@@ -687,22 +687,19 @@ async def log_submit(
             pass
     elif books_id:
         try:
-            resp = get_with_backoff(
-                f"https://www.googleapis.com/books/v1/volumes/{books_id}",
-                params={"key": BOOKS_KEY},
-            )
-            info = resp.json().get("volumeInfo", {})
-            final_title = info.get("title", title)
-            year_str = info.get("publishedDate", "")
-            if year_str and year_str[:4].isdigit() and not year_int:
-                year_int = int(year_str[:4])
-            if not creator:
-                creator = ", ".join(info.get("authors", []))
-            links = info.get("imageLinks") or {}
-            thumb = links.get("thumbnail") or links.get("smallThumbnail")
-            if thumb:
-                poster_url = thumb.replace("http://", "https://")
-            metadata = info
+            info = fetch_open_library_by_key(books_id)
+            if info:
+                final_title = info.get("title") or title
+                year_str = info.get("publishedDate", "")
+                if year_str and year_str[:4].isdigit() and not year_int:
+                    year_int = int(year_str[:4])
+                if not creator:
+                    creator = ", ".join(info.get("authors", []))
+                links = info.get("imageLinks") or {}
+                thumb = links.get("thumbnail")
+                if thumb:
+                    poster_url = thumb
+                metadata = info
         except Exception:
             pass
 
@@ -729,7 +726,7 @@ async def log_submit(
                 enrich_updates: dict = {"metadata": fetched_meta, "metadata_enriched": True}
                 if fetched_poster:
                     enrich_updates["poster_url"] = fetched_poster
-                canonical = fetched_meta.get("title") or fetched_meta.get("name") or fetched_meta.get("volumeInfo", {}).get("title")
+                canonical = fetched_meta.get("title") or fetched_meta.get("name")
                 if canonical:
                     enrich_updates["title"] = canonical
                     final_title = canonical
@@ -939,7 +936,7 @@ async def fetch_metadata(request: Request, item_id: str) -> HTMLResponse:
                 if devs:
                     updates["creator"] = devs[0]
         elif medium == "book":
-            metadata = fetch_google_books(title, doc.get("creator", "")) or {}
+            metadata = fetch_open_library(title, doc.get("creator", "")) or {}
             if metadata:
                 if metadata.get("title"):
                     updates["title"] = metadata["title"]
@@ -949,9 +946,9 @@ async def fetch_metadata(request: Request, item_id: str) -> HTMLResponse:
                 if authors:
                     updates["creator"] = ", ".join(authors)
                 links = metadata.get("imageLinks") or {}
-                thumb = links.get("thumbnail") or links.get("smallThumbnail")
+                thumb = links.get("thumbnail")
                 if thumb:
-                    poster_url = thumb.replace("http://", "https://")
+                    poster_url = thumb
     except Exception as exc:
         return HTMLResponse(f"<p class='text-red-400 text-xs'>Error: {str(exc)[:100]}</p>")
 
@@ -1054,24 +1051,21 @@ async def re_enrich(
                 if devs:
                     updates["creator"] = devs[0]
         elif books_id:
-            resp = get_with_backoff(
-                f"https://www.googleapis.com/books/v1/volumes/{books_id}",
-                params={"key": BOOKS_KEY},
-            )
-            info = resp.json().get("volumeInfo", {})
-            metadata = info
-            if info.get("title"):
-                updates["title"] = info["title"]
-            year_str = info.get("publishedDate", "")
-            if year_str and year_str[:4].isdigit():
-                updates["year"] = int(year_str[:4])
-            authors = info.get("authors") or []
-            if authors:
-                updates["creator"] = ", ".join(authors)
-            links = info.get("imageLinks") or {}
-            thumb = links.get("thumbnail") or links.get("smallThumbnail")
-            if thumb:
-                poster_url = thumb.replace("http://", "https://")
+            info = fetch_open_library_by_key(books_id)
+            if info:
+                metadata = info
+                if info.get("title"):
+                    updates["title"] = info["title"]
+                year_str = info.get("publishedDate", "")
+                if year_str and year_str[:4].isdigit():
+                    updates["year"] = int(year_str[:4])
+                authors = info.get("authors") or []
+                if authors:
+                    updates["creator"] = ", ".join(authors)
+                links = info.get("imageLinks") or {}
+                thumb = links.get("thumbnail")
+                if thumb:
+                    poster_url = thumb
     except Exception as exc:
         return HTMLResponse(f"<p class='text-red-400 text-xs'>Error: {str(exc)[:120]}</p>")
 
@@ -1277,7 +1271,7 @@ async def library_enrich_all(request: Request) -> HTMLResponse:
             updates: dict = {"metadata": metadata, "metadata_enriched": True}
             if poster_url and not item.get("poster_url"):
                 updates["poster_url"] = poster_url
-            canonical = metadata.get("title") or metadata.get("name") or metadata.get("volumeInfo", {}).get("title")
+            canonical = metadata.get("title") or metadata.get("name")
             if canonical and canonical != item["title"]:
                 updates["title"] = canonical
             db["MediaLogs"].update_one({"_id": item["_id"]}, {"$set": updates})
@@ -1374,22 +1368,19 @@ async def watchlist_add(
             pass
     elif books_id:
         try:
-            resp = get_with_backoff(
-                f"https://www.googleapis.com/books/v1/volumes/{books_id}",
-                params={"key": BOOKS_KEY},
-            )
-            info = resp.json().get("volumeInfo", {})
-            final_title = info.get("title", title)
-            year_str = info.get("publishedDate", "")
-            if year_str and year_str[:4].isdigit():
-                year_int = int(year_str[:4])
-            if not creator:
-                creator = ", ".join(info.get("authors", []))
-            links = info.get("imageLinks") or {}
-            thumb = links.get("thumbnail") or links.get("smallThumbnail")
-            if thumb:
-                poster_url = thumb.replace("http://", "https://")
-            metadata = info
+            info = fetch_open_library_by_key(books_id)
+            if info:
+                final_title = info.get("title") or title
+                year_str = info.get("publishedDate", "")
+                if year_str and year_str[:4].isdigit():
+                    year_int = int(year_str[:4])
+                if not creator:
+                    creator = ", ".join(info.get("authors", []))
+                links = info.get("imageLinks") or {}
+                thumb = links.get("thumbnail")
+                if thumb:
+                    poster_url = thumb
+                metadata = info
         except Exception:
             pass
 
