@@ -1110,6 +1110,26 @@ async def set_tier(request: Request, item_id: str, tier: str = Form(...)) -> HTM
     })
 
 
+@app.post("/item/{item_id}/edit")
+async def item_edit(
+    request: Request,
+    item_id: str,
+    title: str = Form(...),
+    creator: str = Form(""),
+    year: str = Form(""),
+    poster_url: str = Form(""),
+):
+    db = get_db()
+    updates: dict = {
+        "title": title.strip(),
+        "creator": creator.strip(),
+        "year": int(year) if year.strip().isdigit() else None,
+        "poster_url": poster_url.strip() or None,
+    }
+    db["MediaLogs"].update_one({"_id": ObjectId(item_id)}, {"$set": updates})
+    return RedirectResponse(f"/item/{item_id}", status_code=303)
+
+
 @app.post("/item/{item_id}/delete")
 async def item_delete(request: Request, item_id: str):
     db = get_db()
