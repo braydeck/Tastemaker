@@ -58,6 +58,7 @@ import { Watchlist, WatchlistAdded } from "./views/watchlist";
 import { Discover, DiscoverResults, Blacklist } from "./views/discover";
 import { Profile, DimRow, ProfileCluster } from "./views/profile";
 
+// Deployed to Cloudflare Workers via Workers Builds (auto-deploy on push to main).
 const app = new Hono<{ Bindings: Env }>();
 
 const IMG = (env: Env) => env.TMDB_IMAGE_BASE;
