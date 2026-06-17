@@ -1,0 +1,27 @@
+name = "tastemaker"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+# D1 (SQLite) — replaces MongoDB. Run `wrangler d1 create tastemaker` and paste
+# the returned database_id below.
+[[d1_databases]]
+binding = "DB"
+database_name = "tastemaker"
+database_id = "99fd68e4-75d5-4319-86f8-33b1c6111faa"
+
+# KV — replaces the .igdb_token file. Run `wrangler kv namespace create IGDB_KV`
+# and paste the returned id below.
+[[kv_namespaces]]
+binding = "IGDB_KV"
+id = "d133fa415c3f47cbb7dbc9e7d1a0b041"
+
+# Non-secret config. Secrets (TMDB_API_KEY, IGDB_CLIENT_ID, IGDB_CLIENT_SECRET,
+# ANTHROPIC_API_KEY) are set with `wrangler secret put <NAME>`, not here.
+[vars]
+TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w300"
+
+# Optional: recompute clusters on a schedule (mirrors running cluster.py).
+# Uncomment to enable; the cron hits the same logic as POST /admin/recluster.
+# [triggers]
+# crons = ["0 9 * * 1"]

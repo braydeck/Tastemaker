@@ -1,0 +1,197 @@
+import { html, View, jsStr } from "./layout";
+import type { Doc } from "../db";
+import { tierName, tierBadgeClass, mediumDot, DIMENSION_LABELS, DIMENSION_DEFINITIONS } from "../constants";
+import { TierSelect } from "./library";
+
+// item.html
+export function ItemDetail(opts: {
+  item: Doc;
+  dims: string[];
+  overview: string;
+  genres: string[];
+}): View {
+  const { item, dims, overview, genres } = opts;
+  const tags = item.psychological_tags ?? {};
+  return html`<div class="max-w-3xl mx-auto">
+
+  <a href="/" class="inline-flex items-center gap-1.5 text-sm text-neutral-500 hover:text-white transition-colors mb-6">
+    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+    </svg>
+    Back to Library
+  </a>
+
+  <div class="flex gap-6 mb-8">
+    ${item.poster_url
+      ? html`<img src="${item.poster_url}" alt="${item.title}" class="w-32 rounded-lg object-cover aspect-[2/3] flex-shrink-0 shadow-lg">`
+      : html`<div class="w-32 aspect-[2/3] bg-neutral-800 rounded-lg flex-shrink-0 flex items-center justify-center p-3">
+      <p class="text-xs text-neutral-500 text-center leading-tight">${item.title}</p>
+    </div>`}
+
+    <div class="flex flex-col justify-center gap-2">
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="w-2.5 h-2.5 rounded-full flex-shrink-0 ${mediumDot(item.medium)}"></span>
+        <span class="text-xs text-neutral-500 capitalize">${item.medium}</span>
+        ${item.tier
+          ? html`<span class="text-xs font-bold px-2 py-0.5 rounded ${tierBadgeClass(item.tier)}">${tierName(item.tier)}</span>`
+          : ""}
+      </div>
+
+      <h1 class="text-2xl font-semibold leading-tight">${item.title}</h1>
+
+      <p class="text-sm text-neutral-400">
+        ${item.creator ? item.creator : ""}${item.creator && item.year ? " · " : ""}${item.year ? item.year : ""}
+      </p>
+
+      ${TierSelect(item._id, item.tier ?? null)}
+
+      ${item.rank_in_tier && item.tier
+        ? html`<p class="text-xs text-neutral-600 mt-1">Ranked in ${tierName(item.tier)}</p>`
+        : ""}
+    </div>
+  </div>
+
+  ${!item.metadata_enriched || !item.metadata || !Object.keys(item.metadata).length
+    ? html`<div id="fetch-meta-area" class="mb-4">
+    <button hx-post="/item/${item._id}/fetch-metadata" hx-target="#fetch-meta-area" hx-swap="innerHTML" hx-indicator="#fetch-spinner"
+            class="flex items-center gap-2 px-3 py-1.5 text-xs bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg transition-colors text-neutral-300">
+      <span id="fetch-spinner" class="htmx-indicator text-neutral-500">⟳</span>
+      Fetch metadata from API
+    </button>
+  </div>`
+    : ""}
+
+  <div id="re-enrich-area" class="mb-6"
+       x-data="{
+         open: false,
+         query: '${jsStr(item.title)}',
+         results: [],
+         loading: false,
+         picking: false,
+         async search() {
+           if (this.query.length < 2) { this.results = []; return; }
+           this.loading = true;
+           const r = await fetch('/api/search?q=' + encodeURIComponent(this.query) + '&medium=${item.medium}');
+           this.results = await r.json();
+           this.loading = false;
+         },
+         async pick(r) {
+           this.picking = true;
+           const fd = new FormData();
+           fd.append('tmdb_id', r.tmdb_id || 0);
+           fd.append('igdb_id', r.igdb_id || 0);
+           fd.append('books_id', r.books_id || '');
+           await fetch('/item/${item._id}/re-enrich', { method: 'POST', body: fd });
+           window.location.reload();
+         }
+       }">
+    <button @click="open = !open; if (open && results.length === 0) search()"
+            class="flex items-center gap-2 px-3 py-1.5 text-xs bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg transition-colors text-neutral-300">
+      Fix / Re-search metadata
+    </button>
+
+    <div x-show="open" x-transition class="mt-3 space-y-2">
+      <input x-model="query" @input.debounce.300ms="search()"
+             class="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-neutral-500"
+             placeholder="Search title...">
+      <p x-show="loading" class="text-neutral-500 text-xs">Searching...</p>
+      <p x-show="picking" class="text-neutral-400 text-xs">Updating metadata...</p>
+      <template x-for="r in results" :key="(r.igdb_id || 0) + (r.tmdb_id || 0) + (r.books_id || '')">
+        <div class="flex items-center gap-3 p-2 bg-neutral-800/60 rounded-lg border border-neutral-700/50">
+          <img x-show="r.poster_url" :src="r.poster_url" class="w-10 rounded flex-shrink-0 aspect-[2/3] object-cover">
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-medium text-white truncate" x-text="r.title + (r.year ? ' (' + r.year + ')' : '')"></p>
+            <p class="text-xs text-neutral-400 truncate" x-text="r.creator || r.overview"></p>
+          </div>
+          <button @click="pick(r)" class="px-3 py-1 text-xs bg-neutral-700 hover:bg-neutral-600 text-white rounded transition-colors flex-shrink-0">Use</button>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <div x-data="{ editing: false }" class="mb-6">
+    <button x-show="!editing" @click="editing = true"
+            class="flex items-center gap-2 px-3 py-1.5 text-xs bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg transition-colors text-neutral-300">Edit details</button>
+    <form x-show="editing" x-transition method="POST" action="/item/${item._id}/edit"
+          class="space-y-3 p-4 bg-neutral-800/50 border border-neutral-700 rounded-lg">
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs text-neutral-500 mb-1">Title</label>
+          <input type="text" name="title" value="${item.title}" class="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-neutral-500">
+        </div>
+        <div>
+          <label class="block text-xs text-neutral-500 mb-1">Creator</label>
+          <input type="text" name="creator" value="${item.creator || ""}" class="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-neutral-500">
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs text-neutral-500 mb-1">Year</label>
+          <input type="text" name="year" value="${item.year || ""}" maxlength="4" class="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-neutral-500">
+        </div>
+        <div>
+          <label class="block text-xs text-neutral-500 mb-1">Poster URL</label>
+          <input type="text" name="poster_url" value="${item.poster_url || ""}" class="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-1.5 text-sm text-white placeholder-neutral-600 focus:outline-none focus:border-neutral-500" placeholder="https://...">
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <button type="submit" class="px-4 py-1.5 text-xs bg-white text-black font-semibold rounded-lg hover:bg-neutral-200 transition-colors">Save</button>
+        <button type="button" @click="editing = false" class="px-4 py-1.5 text-xs bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg transition-colors text-neutral-400">Cancel</button>
+      </div>
+    </form>
+  </div>
+
+  <div x-data="{ confirm: false }" class="mb-6">
+    <button x-show="!confirm" @click="confirm = true"
+            class="flex items-center gap-2 px-3 py-1.5 text-xs bg-neutral-800 hover:bg-red-900/40 border border-neutral-700 hover:border-red-800 rounded-lg transition-colors text-neutral-500 hover:text-red-400">Delete from library</button>
+    <div x-show="confirm" x-transition class="flex items-center gap-3">
+      <span class="text-xs text-red-400">Are you sure?</span>
+      <form method="POST" action="/item/${item._id}/delete">
+        <button type="submit" class="px-3 py-1.5 text-xs bg-red-900/60 hover:bg-red-800 border border-red-800 rounded-lg transition-colors text-red-300">Yes, delete</button>
+      </form>
+      <button @click="confirm = false" class="px-3 py-1.5 text-xs bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg transition-colors text-neutral-400">Cancel</button>
+    </div>
+  </div>
+
+  ${genres.length
+    ? html`<div class="flex flex-wrap gap-2 mb-6">
+    ${genres.map((g) => html`<span class="text-xs px-2.5 py-1 rounded-full bg-neutral-800 text-neutral-400">${g}</span>`)}
+  </div>`
+    : ""}
+
+  ${overview
+    ? html`<div x-data="{ expanded: false }" class="mb-8">
+    <p class="text-sm text-neutral-300 leading-relaxed" :class="expanded ? '' : 'line-clamp-4'">${overview}</p>
+    ${overview.length > 300
+      ? html`<button @click="expanded = !expanded" class="text-xs text-neutral-500 hover:text-white mt-1 transition-colors"><span x-text="expanded ? 'Show less' : 'Read more'">Read more</span></button>`
+      : ""}
+  </div>`
+    : ""}
+
+  ${Object.keys(tags).length
+    ? html`<div class="mb-8">
+    <h2 class="text-xs font-semibold text-neutral-500 uppercase tracking-widest mb-4">Psychological Profile</h2>
+    <div class="space-y-3">
+      ${dims.map((dim) => {
+        const score = tags[dim];
+        if (score == null) return "";
+        const barPct = Math.round(((score - 1) / 4) * 100 * 10) / 10;
+        return html`<div>
+        <div class="flex justify-between items-baseline mb-1">
+          <div>
+            <span class="text-sm text-neutral-300">${DIMENSION_LABELS[dim] ?? dim}</span>
+            <span class="text-xs text-neutral-600 ml-2">${DIMENSION_DEFINITIONS[dim] ?? ""}</span>
+          </div>
+          <span class="text-sm tabular-nums text-neutral-400 ml-4 flex-shrink-0">${Number(score).toFixed(1)}</span>
+        </div>
+        <div class="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+          <div class="h-full bg-neutral-400 rounded-full" style="width: ${barPct}%"></div>
+        </div>
+      </div>`;
+      })}
+    </div>
+  </div>`
+    : ""}
+
+</div>`;
+}

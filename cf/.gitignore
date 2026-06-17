@@ -1,0 +1,8 @@
+node_modules/
+.wrangler/
+# Generated data dump from MongoDB — regenerate with scripts/migrate.ts; contains personal data.
+migration.sql
+.dev.vars
+*.log
+.DS_Store
+dist/
