@@ -210,6 +210,7 @@ app.get("/", async (c) => {
   let sort = c.req.query("sort") ?? "tier";
   const dir = c.req.query("dir") ?? "asc";
   const clusterId = parseInt(c.req.query("cluster_id") ?? "-1", 10);
+  const errorFilter = c.req.query("error") ?? "";
 
   const conds: string[] = [];
   const params: any[] = [];
@@ -220,6 +221,10 @@ app.get("/", async (c) => {
   if (clusterId >= 0) {
     conds.push("cluster_id = ?");
     params.push(clusterId);
+  }
+  if (errorFilter) {
+    conds.push("enrichment_error = ?");
+    params.push(errorFilter);
   }
   if (!SORT_FIELDS.has(sort)) sort = "tier";
   const sortDir = dir === "desc" ? "DESC" : "ASC";
@@ -233,6 +238,11 @@ app.get("/", async (c) => {
     await query(env, "ClusterDefs", "SELECT * FROM ClusterDefs ORDER BY cluster_id ASC")
   ).map((cd) => serialize(cd, env));
 
+  const noMatchCount = await count(
+    env,
+    "SELECT COUNT(*) as c FROM MediaLogs WHERE enrichment_error = 'no_api_match'"
+  );
+
   const content =
     view === "table" ? Table(items, medium, sort, dir) : Grid(tierGroups);
 
@@ -240,7 +250,7 @@ app.get("/", async (c) => {
   return c.html(
     Layout(
       "Library — Tastemaker",
-      Dashboard({ medium, view, sort, dir, clusterId, clusterDefs, content })
+      Dashboard({ medium, view, sort, dir, clusterId, clusterDefs, content, errorFilter, noMatchCount })
     )
   );
 });

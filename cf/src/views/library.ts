@@ -139,8 +139,11 @@ export function Dashboard(opts: {
   clusterId: number;
   clusterDefs: Doc[];
   content: View;
+  errorFilter: string;
+  noMatchCount: number;
 }): View {
-  const { medium, view, clusterId, clusterDefs, content } = opts;
+  const { medium, view, clusterId, clusterDefs, content, errorFilter, noMatchCount } = opts;
+  const plural = noMatchCount !== 1 ? "s" : "";
   const mediumButtons: [string, string][] = [
     ["All", ""],
     ["Movies", "movie"],
@@ -181,6 +184,17 @@ export function Dashboard(opts: {
       </button>
     </div>
   </div>
+
+  ${errorFilter
+    ? html`<div class="flex items-center gap-3 mb-6 text-sm">
+    <span class="px-3 py-1.5 rounded-lg bg-yellow-900/30 text-yellow-500 border border-yellow-800/40">⚠ Showing ${noMatchCount} item${plural} with no API match</span>
+    <a href="/" class="text-neutral-400 hover:text-white transition-colors">✕ Clear filter</a>
+  </div>`
+    : noMatchCount > 0
+      ? html`<div class="mb-6">
+    <a href="/?error=no_api_match" class="inline-flex items-center gap-1.5 text-xs text-yellow-600 hover:text-yellow-400 transition-colors">⚠ ${noMatchCount} item${plural} with no API match — review &amp; fix</a>
+  </div>`
+      : ""}
 
   ${clusterDefs.length
     ? html`<div class="flex gap-2 flex-wrap mb-6">
