@@ -46,6 +46,7 @@ export function Layout(title: string, content: View): View {
         <a href="/onboard" class="text-neutral-400 hover:text-white transition-colors">Onboard</a>
         <a href="/calibrate" class="text-neutral-400 hover:text-white transition-colors">Calibrate</a>
         <a href="/log" class="text-neutral-400 hover:text-white transition-colors">Log</a>
+        <a href="/admin" class="text-neutral-400 hover:text-white transition-colors">Maintenance</a>
       </div>
       <button @click="open = !open" class="md:hidden p-1 text-neutral-400 hover:text-white transition-colors">
         <svg x-show="!open" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

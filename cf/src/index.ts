@@ -57,6 +57,7 @@ import { Calibrate, CalibrateSaved } from "./views/calibrate";
 import { Watchlist, WatchlistAdded } from "./views/watchlist";
 import { Discover, DiscoverResults, Blacklist } from "./views/discover";
 import { Profile, DimRow, ProfileCluster } from "./views/profile";
+import { Admin } from "./views/admin";
 
 // Deployed to Cloudflare Workers via Workers Builds (auto-deploy on push to main).
 const app = new Hono<{ Bindings: Env }>();
@@ -1431,15 +1432,30 @@ app.get("/profile", async (c) => {
 // ---------------------------------------------------------------------------
 // Admin: enrichment + clustering (replace `python enrichment.py` / `cluster.py`)
 // ---------------------------------------------------------------------------
+app.get("/admin", async (c) => {
+  const env = c.env;
+  const total = await count(env, "SELECT COUNT(*) as c FROM MediaLogs");
+  const scored = await count(
+    env,
+    "SELECT COUNT(*) as c FROM MediaLogs WHERE psychological_tags IS NOT NULL AND psychological_tags != '{}'"
+  );
+  const unscored = await count(
+    env,
+    "SELECT COUNT(*) as c FROM MediaLogs WHERE (psychological_tags IS NULL OR psychological_tags = '{}') AND enrichment_error IS NULL"
+  );
+  const errored = await count(env, "SELECT COUNT(*) as c FROM MediaLogs WHERE enrichment_error IS NOT NULL");
+  const clusters = await count(env, "SELECT COUNT(*) as c FROM ClusterDefs");
+  return c.html(Layout("Maintenance — Tastemaker", Admin({ total, scored, unscored, errored, clusters })));
+});
+
 app.post("/admin/enrich", async (c) => {
   const env = c.env;
   const BATCH = 8; // bounded for the free-tier subrequest limit; call repeatedly.
-  const records = await query(
-    env,
-    "MediaLogs",
-    "SELECT * FROM MediaLogs WHERE metadata_enriched = 0 OR metadata_enriched IS NULL LIMIT ?",
-    [BATCH]
-  );
+  // Target items missing psychological scores. Skip ones that already errored so
+  // the loop can't re-select the same failures forever (clear the error via the
+  // item's "Fix / Re-search metadata" to retry).
+  const NEEDS = "(psychological_tags IS NULL OR psychological_tags = '{}') AND enrichment_error IS NULL";
+  const records = await query(env, "MediaLogs", `SELECT * FROM MediaLogs WHERE ${NEEDS} LIMIT ?`, [BATCH]);
   if (!records.length) return c.json({ done: true, enriched: 0, errored: 0, remaining: 0 });
 
   const basePrompt = await buildSystemPrompt(env, "other");
@@ -1483,10 +1499,7 @@ app.post("/admin/enrich", async (c) => {
       errored++;
     }
   }
-  const remaining = await count(
-    env,
-    "SELECT COUNT(*) as c FROM MediaLogs WHERE metadata_enriched = 0 OR metadata_enriched IS NULL"
-  );
+  const remaining = await count(env, `SELECT COUNT(*) as c FROM MediaLogs WHERE ${NEEDS}`);
   return c.json({ done: remaining === 0, enriched, errored, remaining });
 });
 
