@@ -488,7 +488,7 @@ export async function buildSystemPrompt(env: Env, medium: string): Promise<strin
 
 export async function tagWithLlm(env: Env, doc: Doc, systemPrompt: string): Promise<any> {
   const raw = await anthropicMessages(env, {
-    model: "claude-haiku-4-5-20251001",
+    model: "claude-haiku-4-5",
     max_tokens: 512,
     system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: buildUserMessage(doc) }],

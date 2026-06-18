@@ -1281,7 +1281,7 @@ app.post("/discover/generate", async (c) => {
   let recsRaw: any[];
   try {
     const raw = await anthropicMessages(env, {
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 3000,
       system,
       messages: [{ role: "user", content: userMsg }],
@@ -1524,7 +1524,7 @@ async function runClustering(env: Env, k: number): Promise<{ k: number; assigned
     let description = "";
     try {
       const raw = await anthropicMessages(env, {
-        model: "claude-haiku-4-5-20251001",
+        model: "claude-haiku-4-5",
         max_tokens: 256,
         system: NAMING_SYSTEM_PROMPT,
         messages: [{ role: "user", content: userMsg }],
