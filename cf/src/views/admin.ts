@@ -62,6 +62,16 @@ export function Admin(stats: {
   <!-- Recompute taste clusters -->
   <div x-data="{
     running: false, result: '', error: '', k: 4,
+    analyzing: false, elbow: null, elbowError: '',
+    async analyze() {
+      this.analyzing = true; this.elbow = null; this.elbowError = '';
+      try {
+        const r = await fetch('/admin/elbow');
+        const d = await r.json();
+        if (d.ok) this.elbow = d; else this.elbowError = d.error || 'Failed.';
+      } catch (e) { this.elbowError = String(e); }
+      this.analyzing = false;
+    },
     async run() {
       this.running = true; this.result = ''; this.error = '';
       try {
@@ -75,6 +85,38 @@ export function Admin(stats: {
   }" class="border border-neutral-800 rounded-xl p-5">
     <h2 class="text-lg font-semibold mb-1">Taste clusters</h2>
     <p class="text-sm text-neutral-400 mb-4">Re-runs k-means over your profiled Tier 1 + Tier 2 items and re-names each cluster. Do this after profiling new titles so the clusters reflect them.</p>
+
+    <!-- Elbow analysis -->
+    <div class="mb-5">
+      <button @click="analyze()" :disabled="analyzing"
+              :class="analyzing ? 'opacity-40 cursor-not-allowed' : 'hover:bg-neutral-700'"
+              class="flex items-center gap-2 px-3 py-1.5 text-xs bg-neutral-800 border border-neutral-700 rounded-lg transition-colors text-neutral-300">
+        <svg x-show="analyzing" class="animate-spin w-3 h-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+        <span x-text="analyzing ? 'Analyzing…' : 'Analyze cluster count (elbow)'"></span>
+      </button>
+
+      <template x-if="elbow">
+        <div class="mt-4 space-y-1.5">
+          <p class="text-xs text-neutral-400">
+            Suggested: <span class="text-white font-semibold" x-text="'k = ' + elbow.suggestedK"></span>
+            <button @click="k = elbow.suggestedK" class="ml-2 underline text-neutral-400 hover:text-white">use this</button>
+            <span class="text-neutral-600" x-text="'  (' + elbow.n + ' profiled items)'"></span>
+          </p>
+          <template x-for="p in elbow.points" :key="p.k">
+            <div class="flex items-center gap-2 text-xs">
+              <span class="w-8 tabular-nums" :class="p.k === elbow.suggestedK ? 'text-emerald-400 font-semibold' : 'text-neutral-500'" x-text="'k='+p.k"></span>
+              <div class="flex-1 h-2 bg-neutral-800 rounded-full overflow-hidden">
+                <div class="h-full rounded-full" :class="p.k === elbow.suggestedK ? 'bg-emerald-500' : 'bg-neutral-500'" :style="'width:' + (p.inertia / elbow.points[0].inertia * 100) + '%'"></div>
+              </div>
+              <span class="w-16 text-right tabular-nums text-neutral-600" x-text="p.inertia.toFixed(2)"></span>
+            </div>
+          </template>
+          <p class="text-xs text-neutral-600 pt-1">Bars show inertia (within-cluster spread). The elbow — where bars stop shrinking much — is the point of diminishing returns.</p>
+        </div>
+      </template>
+      <p x-show="elbowError" x-cloak class="text-xs text-red-400 mt-3" x-text="elbowError"></p>
+    </div>
+
     <div class="flex items-center gap-3 flex-wrap">
       <label class="text-xs text-neutral-500">Clusters
         <input type="number" min="2" max="10" x-model.number="k"

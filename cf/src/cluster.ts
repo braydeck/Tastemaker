@@ -103,6 +103,30 @@ export function kmeans(X: number[][], k: number, seed = 42, nInit = 10): KMeansR
   return best!;
 }
 
+// Pick the elbow k from {k, inertia} points: normalize both axes to [0,1], then
+// take the point farthest from the line joining the first and last points.
+export function suggestElbowK(points: { k: number; inertia: number }[]): number {
+  if (points.length <= 2) return points[0]?.k ?? 2;
+  const ks = points.map((p) => p.k);
+  const ins = points.map((p) => p.inertia);
+  const kMin = Math.min(...ks), kMax = Math.max(...ks);
+  const iMin = Math.min(...ins), iMax = Math.max(...ins);
+  const norm = points.map((p) => ({
+    x: kMax === kMin ? 0 : (p.k - kMin) / (kMax - kMin),
+    y: iMax === iMin ? 0 : (p.inertia - iMin) / (iMax - iMin),
+    k: p.k,
+  }));
+  const a = norm[0], b = norm[norm.length - 1];
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const denom = Math.hypot(dx, dy) || 1;
+  let bestK = norm[0].k, bestD = -1;
+  for (const p of norm) {
+    const d = Math.abs(dy * (p.x - a.x) - dx * (p.y - a.y)) / denom;
+    if (d > bestD) { bestD = d; bestK = p.k; }
+  }
+  return bestK;
+}
+
 // Denormalize a normalized centroid back to the 1–5 scale, keyed by dimension.
 export function denormalizeCentroid(centroidNorm: number[]): Record<string, number> {
   const out: Record<string, number> = {};

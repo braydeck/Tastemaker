@@ -47,7 +47,7 @@ import {
   extractCreator,
 } from "./util";
 import { computeFinalRank, applyCompareResult } from "./ranking";
-import { buildFeatureRow, kmeans, denormalizeCentroid, topExemplarIndices, KNOWN_DIMS as CLUSTER_DIMS } from "./cluster";
+import { buildFeatureRow, kmeans, denormalizeCentroid, topExemplarIndices, suggestElbowK, KNOWN_DIMS as CLUSTER_DIMS } from "./cluster";
 import { Layout } from "./views/layout";
 import { Dashboard, Grid, Table, TierSelect, TierGroup } from "./views/library";
 import { LogForm, LogCompare, LogDone } from "./views/log";
@@ -1571,6 +1571,27 @@ async function runClustering(env: Env, k: number): Promise<{ k: number; assigned
   }
   return { k, assigned: docs.length };
 }
+
+// Elbow analysis: inertia across k=2..kMax, plus a suggested elbow k. Pure math
+// (no API calls); a reduced n_init keeps it within the free-tier CPU budget.
+app.get("/admin/elbow", async (c) => {
+  const env = c.env;
+  const docs = await query(
+    env,
+    "MediaLogs",
+    "SELECT psychological_tags FROM MediaLogs WHERE tier IN (1,2) AND psychological_tags IS NOT NULL AND psychological_tags != '{}'"
+  );
+  const n = docs.length;
+  if (n < 3) return c.json({ ok: false, error: `Need at least 3 profiled Tier 1/2 items (have ${n}).` });
+  const X = docs.map((d) => buildFeatureRow(d.psychological_tags));
+  const kMax = Math.min(8, n - 1);
+  const points: { k: number; inertia: number }[] = [];
+  for (let k = 2; k <= kMax; k++) {
+    const { inertia } = kmeans(X, k, 42, 3);
+    points.push({ k, inertia: Math.round(inertia * 1000) / 1000 });
+  }
+  return c.json({ ok: true, n, points, suggestedK: suggestElbowK(points) });
+});
 
 app.post("/admin/recluster", async (c) => {
   const k = parseInt(c.req.query("k") ?? "4", 10);
